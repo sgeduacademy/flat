@@ -46,6 +46,8 @@ module.exports = {
         "tabpane",
         "anticon",
         "nums",
+        "Avenir",
+        "Semibold",
 
         // whiteboard
         "unban",
@@ -100,6 +102,7 @@ module.exports = {
 
         // less
         "isstring",
+        "borderless",
 
         // misc
         "npmrc",
