@@ -3,6 +3,7 @@ const DotenvFlow = require("dotenv-flow-webpack");
 const ESLintPlugin = require("eslint-webpack-plugin");
 const nodeExternals = require("webpack-node-externals");
 const ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin");
+const { autoChooseConfig } = require("../../../scripts/utils/auto-choose-config");
 
 const isDevelopment = process.env.NODE_ENV === "development";
 
@@ -27,15 +28,11 @@ module.exports = {
     module: {
         rules: [
             {
-                test: /\.ts?$/,
-                use: [
-                    {
-                        loader: "ts-loader",
-                        options: {
-                            transpileOnly: true,
-                        },
-                    },
-                ],
+                test: /\.ts$/,
+                loader: "ts-loader",
+                options: {
+                    transpileOnly: true,
+                },
                 exclude: /node_modules/,
             },
         ],
@@ -43,7 +40,7 @@ module.exports = {
 
     plugins: [
         new DotenvFlow({
-            path: paths.envConfig,
+            path: autoChooseConfig(),
             system_vars: true,
             default_node_env: "development",
         }),
@@ -69,6 +66,7 @@ module.exports = {
     externals: [
         nodeExternals({
             modulesFromFile: true,
+            allowlist: ["flat-types"],
         }),
     ],
 

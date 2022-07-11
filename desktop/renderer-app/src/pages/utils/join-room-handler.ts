@@ -10,8 +10,12 @@ export const joinRoomHandler = async (
 ): Promise<void> => {
     try {
         const formatRoomUUID = roomUUID.replace(/\s+/g, "");
-        const data = await roomStore.joinRoom(formatRoomUUID);
+        const roomInfo = roomStore.rooms.get(formatRoomUUID);
+        const periodicUUID = roomInfo?.periodicUUID;
+        const data = await roomStore.joinRoom(periodicUUID || formatRoomUUID);
         globalStore.updateShowGuide(data.showGuide);
+        globalStore.updatePeriodicUUID(roomInfo?.periodicUUID);
+
         switch (data.roomType) {
             case RoomType.BigClass: {
                 pushHistory(RouteNameType.BigClassPage, data);

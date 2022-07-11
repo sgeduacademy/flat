@@ -20,6 +20,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { RoomPhase } from "white-web-sdk";
 import { useTranslation } from "react-i18next";
+import { FlatRTCRole } from "@netless/flat-rtc";
 import { AgoraCloudRecordBackgroundConfigItem } from "../../api-middleware/flatServer/agora";
 import { RoomStatus } from "../../api-middleware/flatServer/constants";
 import { RtcChannelType } from "../../api-middleware/rtc/room";
@@ -40,6 +41,7 @@ import { RouteNameType, RouteParams } from "../../utils/routes";
 import { runtime } from "../../utils/runtime";
 import { RTCAvatar } from "../../components/RTCAvatar";
 import { ShareScreen } from "../../components/ShareScreen";
+import { useLoginCheck } from "../utils/use-login-check";
 
 const recordingConfig: RecordingConfig = Object.freeze({
     channelType: RtcChannelType.Broadcast,
@@ -78,11 +80,12 @@ const recordingConfig: RecordingConfig = Object.freeze({
 export type BigClassPageProps = {};
 
 export const BigClassPage = observer<BigClassPageProps>(function BigClassPage() {
+    useLoginCheck();
+
     const { i18n, t } = useTranslation();
     const params = useParams<RouteParams<RouteNameType.BigClassPage>>();
 
     const classRoomStore = useClassRoomStore({ ...params, recordingConfig, i18n });
-    const shareScreenStore = classRoomStore.shareScreenStore;
 
     const whiteboardStore = classRoomStore.whiteboardStore;
 
@@ -125,7 +128,7 @@ export const BigClassPage = observer<BigClassPageProps>(function BigClassPage() 
 
         // is current user speaking
         if (classRoomStore.userUUID === user.userUUID) {
-            classRoomStore.rtc.client?.setClientRole(user.isSpeak ? "host" : "audience");
+            void classRoomStore.rtc.setRole(user.isSpeak ? FlatRTCRole.Host : FlatRTCRole.Audience);
         }
     });
 
@@ -181,7 +184,7 @@ export const BigClassPage = observer<BigClassPageProps>(function BigClassPage() 
                 />
                 <div className="big-class-realtime-content">
                     <div className="big-class-realtime-content-container">
-                        <ShareScreen shareScreenStore={shareScreenStore} />
+                        <ShareScreen classRoomStore={classRoomStore} />
                         <Whiteboard
                             classRoomStore={classRoomStore}
                             whiteboardStore={whiteboardStore}
@@ -223,13 +226,11 @@ export const BigClassPage = observer<BigClassPageProps>(function BigClassPage() 
     function renderTopBarRight(): React.ReactNode {
         return (
             <>
-                {whiteboardStore.isWritable && !shareScreenStore.existOtherUserStream && (
+                {whiteboardStore.isWritable && !classRoomStore.isRemoteScreenSharing && (
                     <TopBarRightBtn
-                        icon={
-                            <SVGScreenSharing active={shareScreenStore.enableShareScreenStatus} />
-                        }
+                        icon={<SVGScreenSharing active={classRoomStore.isScreenSharing} />}
                         title={t("share-screen.self")}
-                        onClick={handleShareScreen}
+                        onClick={() => classRoomStore.toggleShareScreen()}
                     />
                 )}
 
@@ -275,14 +276,14 @@ export const BigClassPage = observer<BigClassPageProps>(function BigClassPage() 
                     ></ChatPanel>
                 }
                 isShow={isRealtimeSideOpen}
-                isVideoOn={true}
+                isVideoOn={classRoomStore.isJoinedRTC}
                 videoSlot={
                     <div className="big-class-realtime-rtc-box">
                         <RTCAvatar
                             avatarUser={creator}
                             isAvatarUserCreator={true}
                             isCreator={classRoomStore.isCreator}
-                            rtcRoom={classRoomStore.rtc}
+                            rtcAvatar={creator && classRoomStore.rtc.getAvatar(creator.rtcUID)}
                             updateDeviceState={classRoomStore.updateDeviceState}
                             userUUID={classRoomStore.userUUID}
                         />
@@ -291,7 +292,7 @@ export const BigClassPage = observer<BigClassPageProps>(function BigClassPage() 
                                 avatarUser={speakingJoiner}
                                 isAvatarUserCreator={false}
                                 isCreator={classRoomStore.isCreator}
-                                rtcRoom={classRoomStore.rtc}
+                                rtcAvatar={classRoomStore.rtc.getAvatar(speakingJoiner.rtcUID)}
                                 updateDeviceState={classRoomStore.updateDeviceState}
                                 userUUID={classRoomStore.userUUID}
                             />
@@ -300,10 +301,6 @@ export const BigClassPage = observer<BigClassPageProps>(function BigClassPage() 
                 }
             />
         );
-    }
-
-    function handleShareScreen(): void {
-        void shareScreenStore.toggle();
     }
 
     function handleSideOpenerSwitch(): void {

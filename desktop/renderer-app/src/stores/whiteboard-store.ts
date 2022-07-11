@@ -1,7 +1,6 @@
 import "video.js/dist/video-js.css";
 
-import { FastboardApp, createFastboard } from "@netless/fastboard";
-import type { Attributes as SlideAttributes } from "@netless/app-slide";
+import { FastboardApp, createFastboard } from "@netless/fastboard-react";
 import { AddAppParams, BuiltinApps, WindowManager } from "@netless/window-manager";
 import { message } from "antd";
 import { i18n } from "i18next";
@@ -9,7 +8,17 @@ import { v4 as v4uuid } from "uuid";
 import { debounce } from "lodash-es";
 import { makeAutoObservable, observable, runInAction } from "mobx";
 import { isMobile, isWindows } from "react-device-detect";
-import { DeviceType, Room, RoomPhase, RoomState, SceneDefinition, ViewMode } from "white-web-sdk";
+import {
+    AnimationMode,
+    DeviceType,
+    Room,
+    RoomPhase,
+    RoomState,
+    SceneDefinition,
+    ViewMode,
+} from "white-web-sdk";
+import { snapshot } from "@netless/white-snapshot";
+
 import { RoomType } from "../../../../packages/flat-components/src/types/room";
 import { CLOUD_STORAGE_DOMAIN, NETLESS, NODE_ENV } from "../constants/process";
 import { CloudStorageFile, CloudStorageStore } from "../pages/CloudStoragePage/store";
@@ -70,6 +79,13 @@ export class WhiteboardStore {
             i18n: this.i18n,
             insertCourseware: this.insertCourseware,
         });
+
+        // Whiteboard debugging
+        const flatUA =
+            process.env.FLAT_UA || (this.i18n.t("app-name") || "").replace(/s+/g, "_").slice(0, 50);
+        window.__netlessUA =
+            (window.__netlessUA || "") +
+            ` FLAT/${flatUA}_${process.env.FLAT_REGION}@${process.env.VERSION} `;
     }
 
     public updateFastboardAPP = (whiteboardApp: FastboardApp): void => {
@@ -98,10 +114,14 @@ export class WhiteboardStore {
         this.isWritable = isWritable;
 
         if (oldWritable !== isWritable && this.room) {
-            await this.room.setWritable(isWritable);
-            this.room.disableDeviceInputs = !isWritable;
-            if (isWritable) {
-                this.room.disableSerialization = false;
+            try {
+                await this.room.setWritable(isWritable);
+                this.room.disableDeviceInputs = !isWritable;
+                if (isWritable) {
+                    this.room.disableSerialization = false;
+                }
+            } catch {
+                /* ignored */
             }
         }
     };
@@ -196,7 +216,7 @@ export class WhiteboardStore {
                         attributes: {
                             taskId,
                             url,
-                        } as SlideAttributes,
+                        },
                     });
                 } else {
                     await this.windowManager.addApp({
@@ -219,7 +239,7 @@ export class WhiteboardStore {
         title: string,
     ): Promise<void> => {
         await this.windowManager?.addApp({
-            kind: BuiltinApps.MediaPlayer,
+            kind: "Plyr",
             options: {
                 title,
             },
@@ -286,6 +306,7 @@ export class WhiteboardStore {
                     cursorName,
                 },
                 floatBar: true,
+                disableEraseImage: true,
                 isWritable: this.isWritable,
                 invisiblePlugins: [WindowManager],
                 uid: globalStore.userUUID,
@@ -332,6 +353,17 @@ export class WhiteboardStore {
             },
         });
 
+        // Disable scale, fix height.
+        fastboardAPP.manager.mainView.setCameraBound({
+            damping: 1,
+            centerX: 0,
+            centerY: 0,
+            minContentMode: () => 1,
+            maxContentMode: () => 1,
+            width: 0,
+            height: 9999,
+        });
+
         this.updateFastboardAPP(fastboardAPP);
 
         const { room, manager } = fastboardAPP;
@@ -346,9 +378,22 @@ export class WhiteboardStore {
             this.updateViewMode(room.state.broadcastState.mode);
         }
 
+        this.scrollToTopOnce();
+
         if (NODE_ENV === "development") {
             (window as any).room = room;
             (window as any).manager = this.windowManager;
+        }
+    }
+
+    private scrollToTopOnce(): void {
+        const { room, windowManager } = this;
+        if (!room || !windowManager) {
+            return;
+        }
+        if (!room.state.globalState || !(room.state.globalState as any).scrollToTop) {
+            room.setGlobalState({ scrollToTop: true });
+            windowManager.moveCamera({ centerY: -950, animationMode: AnimationMode.Immediately });
         }
     }
 
@@ -449,14 +494,14 @@ export class WhiteboardStore {
         }
     };
 
-    public insertImage = async (file: CloudStorageFile): Promise<void> => {
-        const room = this.room;
-        if (!room) {
+    public insertImage = async (file: Pick<CloudStorageFile, "fileURL">): Promise<void> => {
+        const windowManager = this.windowManager;
+        if (!windowManager) {
             return;
         }
 
         // 1. shrink the image a little to fit the screen
-        const maxWidth = window.innerWidth * 0.8;
+        const maxWidth = window.innerWidth * 0.6;
 
         let width: number;
         let height: number;
@@ -479,10 +524,10 @@ export class WhiteboardStore {
         }
 
         const uuid = v4uuid();
-        const { centerX, centerY } = room.state.cameraState;
+        const { centerX, centerY } = windowManager.cameraState;
         width *= scale;
         height *= scale;
-        this.windowManager?.mainView.insertImage({
+        windowManager.mainView.insertImage({
             uuid,
             centerX,
             centerY,
@@ -490,17 +535,18 @@ export class WhiteboardStore {
             height: Math.floor(height),
             locked: false,
         });
-        this.windowManager?.mainView.completeImageUpload(uuid, file.fileURL);
+        windowManager.mainView.completeImageUpload(uuid, file.fileURL);
 
-        // 2. move camera to fit image height
-        width /= 0.8;
-        height /= 0.8;
-        this.windowManager?.moveCameraToContain({
-            originX: centerX - width / 2,
-            originY: centerY - height / 2,
-            width: width,
-            height: height,
-        });
+        // Prevent scale.
+        // // 2. move camera to fit image height
+        // width /= 0.8;
+        // height /= 0.8;
+        // windowManager.moveCameraToContain({
+        //     originX: centerX - width / 2,
+        //     originY: centerY - height / 2,
+        //     width: width,
+        //     height: height,
+        // });
     };
 
     public insertMediaFile = async (file: CloudStorageFile): Promise<void> => {
@@ -513,12 +559,13 @@ export class WhiteboardStore {
             return;
         }
 
-        const { taskUUID, taskToken, region } = file;
+        const { taskUUID, taskToken, region, resourceType } = file;
         const convertingStatus = await queryConvertingTaskStatus({
             taskUUID,
             taskToken,
             dynamic: isPPTX(file.fileName),
             region,
+            projector: resourceType === "WhiteboardProjector",
         });
 
         if (file.convert !== "success") {
@@ -540,7 +587,7 @@ export class WhiteboardStore {
                 if (convertingStatus.status === "Fail") {
                     void message.error(
                         this.i18n.t("transcoding-failure-reason", {
-                            reason: convertingStatus.failedReason,
+                            reason: convertingStatus.errorMessage,
                         }),
                     );
                 }
@@ -564,6 +611,14 @@ export class WhiteboardStore {
             const uuid = v4uuid();
             const scenesPath = `/${taskUUID}/${uuid}`;
             await this.openDocsFileInWindowManager(scenesPath, file.fileName, scenes);
+        } else if (convertingStatus.status === "Finished" && convertingStatus.prefix) {
+            await this.fastboardAPP?.insertDocs({
+                fileType: "pptx",
+                title: file.fileName,
+                scenePath: `/${taskUUID}/${v4uuid()}`,
+                taskId: taskUUID,
+                url: convertingStatus.prefix,
+            });
         } else {
             void message.error(this.i18n.t("unable-to-insert-courseware"));
         }
@@ -615,4 +670,25 @@ export class WhiteboardStore {
             void message.error(this.i18n.t("unable-to-insert-courseware"));
         }
     };
+
+    public getSaveAnnotationImages(): Array<() => Promise<HTMLCanvasElement | null>> {
+        if (this.fastboardAPP) {
+            const { manager } = this.fastboardAPP;
+            return manager.sceneState.scenes.map(scene => {
+                const dir = manager.mainViewSceneDir;
+                // Because manager hacks room.fillSceneSnapshot, we need to hack it back.
+                const room = {
+                    state: manager,
+                    fillSceneSnapshot: manager.mainView.fillSceneSnapshot.bind(manager.mainView),
+                } as any;
+                return () =>
+                    snapshot(room, {
+                        scenePath: dir + scene.name,
+                        crossorigin: true,
+                    });
+            });
+        } else {
+            return [];
+        }
+    }
 }

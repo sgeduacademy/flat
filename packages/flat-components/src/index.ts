@@ -16,6 +16,8 @@ export * from "./components/MainPageLayoutHorizontal";
 export * from "./components/PeriodicRoomPage";
 export * from "./components/RemoveHistoryRoomModal";
 export * from "./components/RemoveRoomModal";
+export * from "./components/SaveAnnotationModal";
+export * from "./components/PresetsModal";
 export * from "./components/RoomDetailPage";
 export * from "./components/RoomStatusElement";
 export * from "./containers/CloudStorageContainer";

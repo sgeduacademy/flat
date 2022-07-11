@@ -8,7 +8,13 @@ export const FLAT_SERVER_VERSIONS = {
 
 export const FLAT_SERVER_LOGIN = {
     GITHUB_CALLBACK: `${FLAT_SERVER_VERSIONS.V1}/login/github/callback`,
+    GOOGLE_CALLBACK: `${FLAT_SERVER_VERSIONS.V1}/login/google/callback`,
     WECHAT_CALLBACK: `${FLAT_SERVER_VERSIONS.V1}/login/weChat/web/callback`,
+} as const;
+
+export const FLAT_SERVER_USER_BINDING = {
+    GITHUB_CALLBACK: `${FLAT_SERVER_VERSIONS.V1}/login/github/callback/binding`,
+    WECHAT_CALLBACK: `${FLAT_SERVER_VERSIONS.V1}/user/binding/platform/wechat/web`,
 } as const;
 
 export enum RoomType {
@@ -40,11 +46,6 @@ export enum Status {
     Failed,
     Process,
     AuthFailed,
-}
-
-export enum Sex {
-    Man = "Man",
-    Woman = "Woman",
 }
 
 export enum FileConvertStep {

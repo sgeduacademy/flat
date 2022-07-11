@@ -34,9 +34,9 @@ export default function JoinPageDesktop({
 
     return (
         <div className="join-page-container">
-            <iframe height="0" src={url} style={{ display: "none" }} width="0" />
+            <iframe height="0" src={url} style={{ display: "none" }} title="[hidden]" width="0" />
             <div className="join-page-header-container">
-                <img alt="flat-logo" src={logoSVG} />
+                <img alt="app logo" src={logoSVG} />
                 {isLogin ? (
                     <Avatar
                         className="join-page-header-avatar"
@@ -90,7 +90,7 @@ export default function JoinPageDesktop({
                     <span>{t("or")}</span>
                 </div>
                 <div className="join-page-content-container-open-flat">
-                    <span>{t("already-installed-flat-tips")}</span>
+                    <span>{t("already-installed-tips")}</span>
                     <a href={url}>{t("open-now")}</a>
                 </div>
             </div>

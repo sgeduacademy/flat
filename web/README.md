@@ -6,9 +6,9 @@
 
 ```shell
 # open dev server
-yarn dev
+pnpm start
 # build to ./dist
-yarn build
+pnpm build
 # preview ./dist
-yarn serve
+pnpm serve
 ```

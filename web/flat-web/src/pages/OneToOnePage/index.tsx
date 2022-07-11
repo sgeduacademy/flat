@@ -2,6 +2,7 @@ import "./OneToOnePage.less";
 
 import React, { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { observer } from "mobx-react-lite";
 import { message } from "antd";
 import { RoomPhase } from "white-web-sdk";
@@ -39,8 +40,8 @@ import { RouteNameType, RouteParams } from "../../utils/routes";
 import { CloudStorageButton } from "../../components/CloudStorageButton";
 import { AgoraCloudRecordBackgroundConfigItem } from "../../api-middleware/flatServer/agora";
 import { runtime } from "../../utils/runtime";
-import { useTranslation } from "react-i18next";
 import { ShareScreen } from "../../components/ShareScreen";
+import { useLoginCheck } from "../utils/use-login-check";
 
 const recordingConfig: RecordingConfig = Object.freeze({
     channelType: RtcChannelType.Communication,
@@ -61,11 +62,12 @@ const recordingConfig: RecordingConfig = Object.freeze({
 export type OneToOnePageProps = {};
 
 export const OneToOnePage = observer<OneToOnePageProps>(function OneToOnePage() {
+    useLoginCheck();
+
     const { i18n, t } = useTranslation();
     const params = useParams<RouteParams<RouteNameType.OneToOnePage>>();
 
     const classRoomStore = useClassRoomStore({ ...params, recordingConfig, i18n });
-    const shareScreenStore = classRoomStore.shareScreenStore;
     const whiteboardStore = classRoomStore.whiteboardStore;
 
     const { confirm, ...exitConfirmModalProps } = useExitRoomConfirmModal(classRoomStore);
@@ -137,7 +139,7 @@ export const OneToOnePage = observer<OneToOnePageProps>(function OneToOnePage() 
                 />
                 <div className="one-to-one-realtime-content">
                     <div className="one-to-one-realtime-content-container">
-                        <ShareScreen shareScreenStore={shareScreenStore} />
+                        <ShareScreen classRoomStore={classRoomStore} />
                         <Whiteboard
                             classRoomStore={classRoomStore}
                             disableHandRaising={true}
@@ -155,10 +157,6 @@ export const OneToOnePage = observer<OneToOnePageProps>(function OneToOnePage() 
             </div>
         </div>
     );
-
-    function handleShareScreen(): void {
-        void shareScreenStore.toggle();
-    }
 
     function renderTopBarLeft(): React.ReactNode {
         return (
@@ -184,13 +182,11 @@ export const OneToOnePage = observer<OneToOnePageProps>(function OneToOnePage() 
     function renderTopBarRight(): React.ReactNode {
         return (
             <>
-                {whiteboardStore.isWritable && !shareScreenStore.existOtherUserStream && (
+                {whiteboardStore.isWritable && !classRoomStore.isRemoteScreenSharing && (
                     <TopBarRightBtn
-                        icon={
-                            <SVGScreenSharing active={shareScreenStore.enableShareScreenStatus} />
-                        }
+                        icon={<SVGScreenSharing active={classRoomStore.isScreenSharing} />}
                         title={t("share-screen.self")}
-                        onClick={handleShareScreen}
+                        onClick={() => classRoomStore.toggleShareScreen()}
                     />
                 )}
 
@@ -234,14 +230,17 @@ export const OneToOnePage = observer<OneToOnePageProps>(function OneToOnePage() 
                     ></ChatPanel>
                 }
                 isShow={isRealtimeSideOpen}
-                isVideoOn={true}
+                isVideoOn={classRoomStore.isJoinedRTC}
                 videoSlot={
                     <div className="one-to-one-rtc-avatar-container">
                         <RTCAvatar
                             avatarUser={classRoomStore.users.creator}
                             isAvatarUserCreator={true}
                             isCreator={classRoomStore.isCreator}
-                            rtcRoom={classRoomStore.rtc}
+                            rtcAvatar={
+                                classRoomStore.users.creator &&
+                                classRoomStore.rtc.getAvatar(classRoomStore.users.creator.rtcUID)
+                            }
                             updateDeviceState={classRoomStore.updateDeviceState}
                             userUUID={classRoomStore.userUUID}
                         />
@@ -249,7 +248,7 @@ export const OneToOnePage = observer<OneToOnePageProps>(function OneToOnePage() 
                             avatarUser={joiner}
                             isAvatarUserCreator={false}
                             isCreator={classRoomStore.isCreator}
-                            rtcRoom={classRoomStore.rtc}
+                            rtcAvatar={joiner && classRoomStore.rtc.getAvatar(joiner.rtcUID)}
                             updateDeviceState={classRoomStore.updateDeviceState}
                             userUUID={classRoomStore.userUUID}
                         />

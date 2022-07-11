@@ -1,6 +1,6 @@
 import React from "react";
 import { observer } from "mobx-react-lite";
-import { useParams } from "react-router";
+import { useParams } from "react-router-dom";
 import { RouteNameType, RouteParams } from "../../utils/routes";
 import { DynamicPreview } from "./DynamicPreview";
 import { MediaPreview } from "./MediaPreview";
@@ -12,7 +12,7 @@ export interface ResourcePreviewPagePageProps {}
 
 export const ResourcePreviewPage = observer<ResourcePreviewPagePageProps>(
     function ResourcePreviewPage() {
-        const { fileURL, taskToken, taskUUID, region } =
+        const { fileURL, taskToken, taskUUID, region, projector } =
             useParams<RouteParams<RouteNameType.ResourcePreviewPage>>();
 
         const decodeFileName = decodeURIComponent(fileURL);
@@ -27,6 +27,7 @@ export const ResourcePreviewPage = observer<ResourcePreviewPagePageProps>(
                     if (taskUUID && taskToken) {
                         return (
                             <DynamicPreview
+                                projector={projector === "projector"}
                                 region={region as Region}
                                 taskToken={taskToken}
                                 taskUUID={taskUUID}

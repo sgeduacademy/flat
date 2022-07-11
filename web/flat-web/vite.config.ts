@@ -1,43 +1,26 @@
-import legacy from "@vitejs/plugin-legacy";
-import refresh from "@vitejs/plugin-react-refresh";
+import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { dotenv } from "./scripts/vite-plugin-dotenv";
 import { injectHtmlHash } from "./scripts/vite-plugin-html-hash";
 import { version } from "./scripts/vite-plugin-version";
 import { inlineAssets } from "./scripts/vite-plugin-inline-assets";
-import {
-    configPath,
-    typesEntryPath,
-    i18nEntryPath,
-    componentsEntryPath,
-    mainPackageJSONPath,
-} from "../../scripts/constants";
+import { reactVirtualized } from "./scripts/vite-plugin-react-virtualized";
+import { mainPackageJSONPath } from "../../scripts/constants";
+import { autoChooseConfig } from "../../scripts/utils/auto-choose-config";
 
 export default defineConfig({
     plugins: [
-        refresh(),
-        legacy(),
-        dotenv(configPath),
+        react(),
+        dotenv(autoChooseConfig()),
         injectHtmlHash(),
         version(mainPackageJSONPath),
         inlineAssets(),
+        reactVirtualized(),
     ],
     resolve: {
         alias: [
             // replace webpack alias
             { find: /^~/, replacement: "" },
-            {
-                find: "flat-types",
-                replacement: typesEntryPath,
-            },
-            {
-                find: "flat-i18n",
-                replacement: i18nEntryPath,
-            },
-            {
-                find: "flat-components",
-                replacement: componentsEntryPath,
-            },
         ],
     },
     build: {

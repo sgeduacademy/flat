@@ -6,7 +6,7 @@
 
     .telebox-collector {
         position: absolute;
-        left: 220px;
+        left: 90px;
         bottom: 8px;
         width: 40px;
         height: 34px;
@@ -15,7 +15,11 @@
         transition: ease-out 0.2s;
     }
 
-    .fastboard-toolbar-btn {
+    .fastboard-view {
+        position: static;
+    }
+
+    .fastboard-toolbar-btn, .fastboard-toolbar-handler {
         outline: 0;
     }
 
@@ -71,6 +75,11 @@
 
 .flat-color-scheme-dark {
     .whiteboard-container {
+        background: #15181d;
+    }
+
+    .netless-window-manager-sizer::before,
+    .netless-window-manager-sizer::after {
         background: #15181d;
     }
 }

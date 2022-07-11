@@ -1,18 +1,28 @@
 import "@netless/window-manager/dist/style.css";
 import "./Whiteboard.less";
 
-import { Fastboard, Language } from "@netless/fastboard-react";
 import classNames from "classnames";
-import { DarkModeContext, RaiseHand } from "flat-components";
-import { observer } from "mobx-react-lite";
 import React, { useCallback, useContext, useEffect, useState } from "react";
+import { Fastboard, FastboardUIConfig, Language } from "@netless/fastboard-react";
+import {
+    DarkModeContext,
+    PresetsModal,
+    RaiseHand,
+    SaveAnnotationModal,
+    SaveAnnotationModalProps,
+} from "flat-components";
+import { observer } from "mobx-react-lite";
 import { message } from "antd";
 import { useTranslation } from "react-i18next";
 import { RoomPhase } from "white-web-sdk";
+
 import { WhiteboardStore } from "../stores/whiteboard-store";
 import { isSupportedFileExt } from "../utils/drag-and-drop";
 import { isSupportedImageType, onDropImage } from "../utils/drag-and-drop/image";
 import { ClassRoomStore } from "../stores/class-room-store";
+import { refreshApps } from "../utils/toolbar-apps";
+import { PRESETS } from "../constants/presets";
+import { mousewheelToScroll } from "../utils/mousewheel-to-scroll";
 
 export interface WhiteboardProps {
     whiteboardStore: WhiteboardStore;
@@ -22,6 +32,12 @@ export interface WhiteboardProps {
 
 const noop = (): void => {
     // noop
+};
+
+// Hide zoom control.
+const config: FastboardUIConfig = {
+    zoom_control: { enable: false },
+    toolbar: { apps: { enable: true } },
 };
 
 export const Whiteboard = observer<WhiteboardProps>(function Whiteboard({
@@ -35,6 +51,11 @@ export const Whiteboard = observer<WhiteboardProps>(function Whiteboard({
 
     const [whiteboardEl, setWhiteboardEl] = useState<HTMLElement | null>(null);
     const [collectorEl, setCollectorEl] = useState<HTMLElement | null>(null);
+    const [saveAnnotationVisible, showSaveAnnotation] = useState(false);
+    const [saveAnnotationImages, setSaveAnnotationImages] = useState<
+        SaveAnnotationModalProps["images"]
+    >([]);
+    const [presetsVisible, showPresets] = useState(false);
 
     const isReconnecting = phase === RoomPhase.Reconnecting;
 
@@ -47,6 +68,13 @@ export const Whiteboard = observer<WhiteboardProps>(function Whiteboard({
             fastboardAPP.bindCollector(collectorEl);
         }
     }, [collectorEl, fastboardAPP]);
+
+    useEffect(() => {
+        if (whiteboardEl && fastboardAPP) {
+            return mousewheelToScroll(whiteboardEl, fastboardAPP);
+        }
+        return;
+    }, [whiteboardEl, fastboardAPP]);
 
     const whiteboardOnResize = useCallback(() => {
         if (whiteboardEl) {
@@ -61,11 +89,11 @@ export const Whiteboard = observer<WhiteboardProps>(function Whiteboard({
             let smallClassAvatarWrapMaxWidth: number;
 
             if (isSmallClass) {
-                classRoomTopBarHeight = 182;
+                classRoomTopBarHeight = 150;
                 classRoomMinWidth = 1130;
                 classRoomMinHeight = 610;
             } else {
-                classRoomTopBarHeight = 50;
+                classRoomTopBarHeight = 40;
                 classRoomMinWidth = 1020;
                 classRoomMinHeight = 522;
             }
@@ -118,6 +146,24 @@ export const Whiteboard = observer<WhiteboardProps>(function Whiteboard({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [whiteboardStore.isRightSideClose]);
 
+    useEffect(() => {
+        refreshApps({
+            t,
+            onSaveAnnotation: () => {
+                showSaveAnnotation(true);
+            },
+            onPresets: () => {
+                showPresets(true);
+            },
+        });
+    }, [t]);
+
+    useEffect(() => {
+        if (saveAnnotationVisible) {
+            setSaveAnnotationImages(whiteboardStore.getSaveAnnotationImages());
+        }
+    }, [saveAnnotationVisible, whiteboardStore]);
+
     const bindWhiteboard = useCallback((ref: HTMLDivElement | null) => {
         if (ref) {
             setWhiteboardEl(ref);
@@ -129,6 +175,14 @@ export const Whiteboard = observer<WhiteboardProps>(function Whiteboard({
             setCollectorEl(ref);
         }
     }, []);
+
+    const insertPresetImage = useCallback(
+        (fileURL: string) => {
+            whiteboardStore.insertImage({ fileURL });
+            showPresets(false);
+        },
+        [whiteboardStore],
+    );
 
     const onDragOver = useCallback(
         (event: React.DragEvent<HTMLDivElement>) => {
@@ -161,31 +215,45 @@ export const Whiteboard = observer<WhiteboardProps>(function Whiteboard({
     );
 
     return (
-        room && (
-            <div
-                className={classNames("whiteboard-container", {
-                    "is-readonly": !whiteboardStore.isWritable,
-                })}
-                onDragOver={onDragOver}
-                onDrop={onDrop}
-            >
-                {!whiteboardStore.isCreator && !whiteboardStore.isWritable && (
-                    <div className="raise-hand-container">
-                        <RaiseHand
-                            disableHandRaising={disableHandRaising}
-                            isRaiseHand={classRoomStore.users.currentUser?.isRaiseHand}
-                            onRaiseHandChange={classRoomStore.onToggleHandRaising}
-                        />
-                    </div>
-                )}
-                <div ref={bindCollector} />
-                <Fastboard
-                    ref={bindWhiteboard}
-                    app={fastboardAPP}
-                    language={i18n.language as Language}
-                    theme={isDark ? "dark" : "light"}
-                />
-            </div>
-        )
+        <>
+            {room && (
+                <div
+                    className={classNames("whiteboard-container", {
+                        "is-readonly": !whiteboardStore.isWritable,
+                    })}
+                    onDragOver={onDragOver}
+                    onDrop={onDrop}
+                >
+                    {!whiteboardStore.isCreator && !whiteboardStore.isWritable && (
+                        <div className="raise-hand-container">
+                            <RaiseHand
+                                disableHandRaising={disableHandRaising}
+                                isRaiseHand={classRoomStore.users.currentUser?.isRaiseHand}
+                                onRaiseHandChange={classRoomStore.onToggleHandRaising}
+                            />
+                        </div>
+                    )}
+                    <div ref={bindCollector} />
+                    <Fastboard
+                        app={fastboardAPP}
+                        config={config}
+                        containerRef={bindWhiteboard}
+                        language={i18n.language as Language}
+                        theme={isDark ? "dark" : "light"}
+                    />
+                </div>
+            )}
+            <SaveAnnotationModal
+                images={saveAnnotationImages}
+                visible={saveAnnotationVisible}
+                onClose={() => showSaveAnnotation(false)}
+            />
+            <PresetsModal
+                images={PRESETS}
+                visible={presetsVisible}
+                onClick={insertPresetImage}
+                onClose={() => showPresets(false)}
+            />
+        </>
     );
 });

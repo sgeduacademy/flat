@@ -36,9 +36,10 @@ import { coursewarePreloader } from "../../utils/courseware-preloader";
 import { getUploadTaskManager } from "../../utils/upload-task-manager";
 import { UploadStatusType, UploadTask } from "../../utils/upload-task-manager/upload-task";
 import { ConvertStatusManager } from "./ConvertStatusManager";
+import { Scheduler } from "./scheduler";
 
 export type CloudStorageFile = CloudStorageFileUI &
-    Pick<CloudFile, "fileURL" | "taskUUID" | "taskToken" | "region" | "external">;
+    Pick<CloudFile, "fileURL" | "taskUUID" | "taskToken" | "region" | "external" | "resourceType">;
 
 export type FileMenusKey = "open" | "download" | "rename" | "delete";
 
@@ -51,10 +52,16 @@ export class CloudStorageStore extends CloudStorageStoreBase {
     public insertCourseware: (file: CloudStorageFile) => void;
     public onCoursewareInserted?: () => void;
 
+    /** In order to avoid multiple calls the fetchMoreCloudStorageData
+     * when request fetchMoreCloudStorageData after files length is 0  */
+    public hasMoreFile = true;
+
     // a set of taskUUIDs representing querying tasks
     private convertStatusManager = new ConvertStatusManager();
 
     private i18n: i18n;
+
+    private scheduler: Scheduler;
 
     public constructor({
         compact,
@@ -70,6 +77,7 @@ export class CloudStorageStore extends CloudStorageStoreBase {
         this.insertCourseware = insertCourseware;
         this.compact = compact;
         this.i18n = i18n;
+        this.scheduler = new Scheduler(this.refreshFiles, 10 * 1000);
 
         makeObservable(this, {
             filesMap: observable,
@@ -278,12 +286,74 @@ export class CloudStorageStore extends CloudStorageStoreBase {
         this.uploadTaskManager.addTasks(Array.from(files));
     }
 
+    public fetchMoreCloudStorageData = async (page: number): Promise<void> => {
+        if (this.isFetchingFiles) {
+            return;
+        }
+
+        const cloudStorageTotalPagesFilesCount =
+            this.cloudStorageDataPagination * this.cloudStorageSinglePageFiles;
+
+        if (this.filesMap.size >= cloudStorageTotalPagesFilesCount && this.hasMoreFile) {
+            runInAction(() => {
+                this.isFetchingFiles = true;
+            });
+
+            try {
+                const { files: cloudFiles } = await listFiles({
+                    page,
+                    order: "DESC",
+                });
+
+                runInAction(() => {
+                    this.isFetchingFiles = false;
+                });
+
+                this.hasMoreFile = cloudFiles.length > 0;
+
+                const newFiles: Record<string, CloudStorageFile> = {};
+
+                for (const cloudFile of cloudFiles) {
+                    const file = this.filesMap.get(cloudFile.fileUUID);
+
+                    runInAction(() => {
+                        if (file) {
+                            if (file.createAt.valueOf() !== cloudFile.createAt.valueOf()) {
+                                file.createAt = cloudFile.createAt;
+                            }
+                            file.fileName = cloudFile.fileName;
+                            file.fileSize = cloudFile.fileSize;
+                            file.convert = CloudStorageStore.mapConvertStep(cloudFile.convertStep);
+                            file.taskToken = cloudFile.taskToken;
+                            file.taskUUID = cloudFile.taskUUID;
+                            file.external = cloudFile.external;
+                            file.resourceType = cloudFile.resourceType;
+                        } else {
+                            newFiles[cloudFile.fileUUID] = observable.object({
+                                ...cloudFile,
+                                convert: CloudStorageStore.mapConvertStep(cloudFile.convertStep),
+                            });
+                        }
+                    });
+                }
+
+                runInAction(() => {
+                    this.filesMap.merge(newFiles);
+                });
+            } catch {
+                runInAction(() => {
+                    this.isFetchingFiles = false;
+                });
+            }
+        }
+    };
+
     public initialize({
         onCoursewareInserted,
     }: { onCoursewareInserted?: () => void } = {}): () => void {
         this.onCoursewareInserted = onCoursewareInserted;
 
-        void this.refreshFiles();
+        this.scheduler.start();
 
         if (
             this.uploadTaskManager.pending.length <= 0 &&
@@ -296,32 +366,22 @@ export class CloudStorageStore extends CloudStorageStoreBase {
             () => this.uploadTaskManager.uploading.length,
             (currLen, prevLen) => {
                 if (currLen < prevLen) {
-                    this.refreshFilesNowDebounced();
+                    console.log("[cloud storage]: start now refresh");
+                    this.scheduler.invoke();
+                    this.hasMoreFile = true;
                 }
             },
         );
 
         return () => {
             disposer();
-            window.clearTimeout(this._refreshFilesTimeout);
-            this._refreshFilesTimeout = NaN;
+            this.scheduler.stop();
             this.convertStatusManager.cancelAllTasks();
             this.onCoursewareInserted = undefined;
         };
     }
 
-    private _refreshFilesTimeout = NaN;
-    private _refreshFilesNowTimeout = NaN;
-
-    private clearRefreshFilesNowTimeout(): void {
-        window.clearTimeout(this._refreshFilesNowTimeout);
-        this._refreshFilesNowTimeout = NaN;
-    }
-
-    private async refreshFiles(): Promise<void> {
-        window.clearTimeout(this._refreshFilesTimeout);
-        this.clearRefreshFilesNowTimeout();
-
+    private refreshFiles = async (): Promise<void> => {
         try {
             const { totalUsage, files: cloudFiles } = await listFiles({
                 page: 1,
@@ -332,26 +392,28 @@ export class CloudStorageStore extends CloudStorageStoreBase {
                 this.totalUsage = totalUsage;
             });
 
+            const newFiles: Record<string, CloudStorageFile> = {};
+
             for (const cloudFile of cloudFiles) {
                 const file = this.filesMap.get(cloudFile.fileUUID);
 
                 runInAction(() => {
                     if (file) {
+                        if (file.createAt.valueOf() !== cloudFile.createAt.valueOf()) {
+                            file.createAt = cloudFile.createAt;
+                        }
                         file.fileName = cloudFile.fileName;
-                        file.createAt = cloudFile.createAt;
                         file.fileSize = cloudFile.fileSize;
                         file.convert = CloudStorageStore.mapConvertStep(cloudFile.convertStep);
                         file.taskToken = cloudFile.taskToken;
                         file.taskUUID = cloudFile.taskUUID;
                         file.external = cloudFile.external;
+                        file.resourceType = cloudFile.resourceType;
                     } else {
-                        this.filesMap.set(
-                            cloudFile.fileUUID,
-                            observable.object({
-                                ...cloudFile,
-                                convert: CloudStorageStore.mapConvertStep(cloudFile.convertStep),
-                            }),
-                        );
+                        newFiles[cloudFile.fileUUID] = observable.object({
+                            ...cloudFile,
+                            convert: CloudStorageStore.mapConvertStep(cloudFile.convertStep),
+                        });
                     }
                 });
 
@@ -364,33 +426,17 @@ export class CloudStorageStore extends CloudStorageStoreBase {
                     await this.queryConvertStatus(cloudFile.fileUUID);
                 }
             }
+
+            runInAction(() => {
+                this.filesMap.merge(newFiles);
+            });
         } catch (e) {
             errorTips(e);
         }
-
-        if (!this._refreshFilesNowTimeout) {
-            this.refreshFilesDebounced(10 * 1000);
-        }
-    }
-
-    private refreshFilesDebounced(timeout = 500): void {
-        window.clearTimeout(this._refreshFilesTimeout);
-        this._refreshFilesTimeout = window.setTimeout(() => {
-            void this.refreshFiles();
-        }, timeout);
-    }
-
-    private refreshFilesNowDebounced(timeout = 800): void {
-        this.clearRefreshFilesNowTimeout();
-        console.log("[cloud storage]: start now refresh");
-        this._refreshFilesNowTimeout = window.setTimeout(() => {
-            console.log("[cloud storage]: start now refresh!!!!!!!!!");
-            void this.refreshFiles();
-        }, timeout);
-    }
+    };
 
     private previewCourseware(file: CloudStorageFile): void {
-        const { fileURL, taskToken, taskUUID, region } = file;
+        const { fileURL, taskToken, taskUUID, region, resourceType } = file;
 
         const convertFileTypeList = [".pptx", ".ppt", ".pdf", ".doc", ".docx"];
 
@@ -398,8 +444,10 @@ export class CloudStorageStore extends CloudStorageStoreBase {
 
         const encodeFileURL = encodeURIComponent(fileURL);
 
+        const projector = resourceType === "WhiteboardProjector" ? "projector" : "legacy";
+
         const resourcePreviewURL = isConvertFileType
-            ? `${FLAT_WEB_BASE_URL}/preview/${encodeFileURL}/${taskToken}/${taskUUID}/${region}/`
+            ? `${FLAT_WEB_BASE_URL}/preview/${encodeFileURL}/${taskToken}/${taskUUID}/${region}/${projector}/`
             : `${FLAT_WEB_BASE_URL}/preview/${encodeFileURL}/`;
 
         switch (file.convert) {
@@ -550,6 +598,7 @@ export class CloudStorageStore extends CloudStorageStoreBase {
                         }
                         const { taskToken, taskUUID } = await convertStart({
                             fileUUID: file.fileUUID,
+                            isWhiteboardProjector: isPPTX(file.fileName),
                         });
                         runInAction(() => {
                             file.convert = "converting";
@@ -620,16 +669,17 @@ export class CloudStorageStore extends CloudStorageStoreBase {
             return true;
         }
 
-        let status: ConvertingTaskStatus["status"];
-        let progress: ConvertingTaskStatus["progress"];
+        const dynamic = isPPTX(file.fileName);
+        let status: ConvertingTaskStatus;
 
         try {
-            ({ status, progress } = await queryConvertingTaskStatus({
+            status = await queryConvertingTaskStatus({
                 taskToken: file.taskToken,
                 taskUUID: file.taskUUID,
-                dynamic: isPPTX(file.fileName),
+                dynamic,
                 region: file.region,
-            }));
+                projector: file.resourceType === "WhiteboardProjector",
+            });
         } catch (e) {
             console.error(e);
             return false;
@@ -639,12 +689,14 @@ export class CloudStorageStore extends CloudStorageStoreBase {
             console.log(
                 "[cloud-storage] query convert status",
                 file.fileName,
-                status,
-                progress?.convertedPercentage,
+                status.status,
+                status.convertedPercentage,
             );
         }
 
-        if (status === "Fail" || status === "Finished") {
+        const statusText = status.status;
+
+        if (statusText === "Fail" || statusText === "Finished") {
             if (process.env.DEV) {
                 console.log("[cloud storage]: convert finish", file.fileName);
             }
@@ -657,14 +709,12 @@ export class CloudStorageStore extends CloudStorageStoreBase {
             }
 
             runInAction(() => {
-                file.convert = status === "Fail" ? "error" : "success";
+                file.convert = statusText === "Fail" ? "error" : "success";
             });
 
-            if (status === "Finished") {
-                const src = progress?.convertedFileList?.[0].conversionFileUrl;
-                if (src) {
-                    void coursewarePreloader.preload(src).catch(error => console.warn(error));
-                }
+            if (statusText === "Finished" && status.prefix) {
+                const src = status.prefix + "/" + status.uuid + "/1.png";
+                void coursewarePreloader.preload(src).catch(error => console.warn(error));
             }
 
             return true;

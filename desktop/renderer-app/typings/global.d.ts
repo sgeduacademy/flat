@@ -25,19 +25,22 @@ declare namespace NodeJS {
         AGORA_APP_ID: string;
 
         GITHUB_CLIENT_ID: string;
+        GOOGLE_OAUTH_CLIENT_ID: string;
 
         WECHAT_APP_ID: string;
         FLAT_SERVER_DOMAIN: string;
         FLAT_WEB_DOMAIN: string;
 
         CLOUD_RECORDING_DEFAULT_AVATAR?: string;
-    }
-}
 
-interface Window {
-    rtcEngine: any;
+        FLAT_REGION: "CN" | "US";
+    }
 }
 
 interface PortalWindow extends Window {
     browserWindowID: string;
+}
+
+interface Window {
+    __netlessUA?: string;
 }

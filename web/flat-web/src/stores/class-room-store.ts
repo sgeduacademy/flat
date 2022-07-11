@@ -1,9 +1,10 @@
-import { NetworkQuality } from "agora-rtc-sdk-ng";
 import { message } from "antd";
 import dateSub from "date-fns/sub";
 import type { i18n } from "i18next";
 import { action, autorun, makeAutoObservable, observable, reaction, runInAction } from "mobx";
 import { useEffect, useState } from "react";
+import { SideEffectManager } from "side-effect-manager";
+import { FlatRTC, FlatRTCMode, FlatRTCRole } from "@netless/flat-rtc";
 import { i18n as i18next } from "../utils/i18n";
 import { v4 as uuidv4 } from "uuid";
 import { CloudRecording } from "../api-middleware/CloudRecording";
@@ -15,11 +16,13 @@ import {
     stopRecordRoom,
 } from "../api-middleware/flatServer";
 import {
+    checkRTMCensor,
     CloudRecordStartPayload,
     CloudRecordUpdateLayoutPayload,
+    generateRTCToken,
 } from "../api-middleware/flatServer/agora";
 import { RoomStatus, RoomType } from "../api-middleware/flatServer/constants";
-import { RtcChannelType, RtcRoom as RTCAPI } from "../api-middleware/rtc/room";
+import { RtcChannelType } from "../api-middleware/rtc/room";
 import {
     ClassModeType,
     NonDefaultUserProp,
@@ -35,9 +38,10 @@ import { useAutoRun } from "../utils/mobx";
 import { RouteNameType, usePushHistory } from "../utils/routes";
 import { globalStore } from "./GlobalStore";
 import { RoomItem, roomStore } from "./room-store";
-import { ShareScreenStore } from "./share-screen-store";
 import { User, UserStore } from "./user-store";
 import { WhiteboardStore } from "./whiteboard-store";
+import { getFlatRTC } from "../services/flat-rtc";
+import { NEED_CHECK_CENSOR } from "../constants/config";
 
 export type { User } from "./user-store";
 
@@ -60,6 +64,8 @@ export enum RoomStatusLoadingType {
 }
 
 export class ClassRoomStore {
+    private sideEffect = new SideEffectManager();
+
     public readonly roomUUID: string;
     /** User uuid of the current user */
     public readonly userUUID: string;
@@ -71,14 +77,21 @@ export class ClassRoomStore {
     public isBan = false;
     /** is Cloud Recording on */
     public isRecording = false;
-    /** is RTC on */
+    /** is RTC UI on */
     public isCalling = false;
+    /** is RTC joined room */
+    public isJoinedRTC = false;
     /** is user login on other device */
     public isRemoteLogin = false;
 
     public isCloudStoragePanelVisible = false;
 
     public roomStatusLoading = RoomStatusLoadingType.Null;
+
+    /** is current user sharing screen */
+    public isScreenSharing = false;
+    /** is other users sharing screen */
+    public isRemoteScreenSharing = false;
 
     public networkQuality = {
         delay: 0,
@@ -88,15 +101,11 @@ export class ClassRoomStore {
 
     public readonly users: UserStore;
 
-    public readonly rtcChannelType: RtcChannelType;
-
-    public readonly rtc: RTCAPI;
+    public readonly rtc: FlatRTC;
     public readonly rtm: RTMAPI;
     public readonly cloudRecording: CloudRecording;
 
     public readonly whiteboardStore: WhiteboardStore;
-
-    public readonly shareScreenStore: ShareScreenStore;
 
     /** This ownerUUID is from url params matching which cannot be trusted */
     private readonly ownerUUIDFromParams: string;
@@ -133,9 +142,7 @@ export class ClassRoomStore {
         this.userUUID = globalStore.userUUID;
         this.recordingConfig = config.recordingConfig;
         this.classMode = config.classMode ?? ClassModeType.Lecture;
-        this.rtcChannelType = config.recordingConfig.channelType ?? RtcChannelType.Communication;
-
-        this.rtc = new RTCAPI();
+        this.rtc = getFlatRTC();
         this.rtm = new RTMAPI();
         this.cloudRecording = new CloudRecording({ roomUUID: config.roomUUID });
 
@@ -164,8 +171,6 @@ export class ClassRoomStore {
             onDrop: this.onDrop,
         });
 
-        this.shareScreenStore = new ShareScreenStore(this.roomUUID);
-
         autorun(reaction => {
             if (this.whiteboardStore.isKicked) {
                 reaction.dispose();
@@ -174,16 +179,6 @@ export class ClassRoomStore {
                 });
             }
         });
-
-        reaction(
-            () => this.whiteboardStore.isWritable,
-            () => {
-                this.shareScreenStore.updateIsWritable(this.whiteboardStore.isWritable);
-            },
-            {
-                fireImmediately: true,
-            },
-        );
 
         reaction(
             () => this.isRecording,
@@ -260,14 +255,41 @@ export class ClassRoomStore {
 
         this.updateCalling(true);
 
+        this.sideEffect.addDisposer(
+            this.rtc.shareScreen.events.on(
+                "local-changed",
+                action("localShareScreen", enabled => {
+                    this.isScreenSharing = enabled;
+                }),
+            ),
+            "share-screen-local-changed",
+        );
+
+        this.sideEffect.addDisposer(
+            this.rtc.shareScreen.events.on(
+                "remote-changed",
+                action("remoteShareScreen", enabled => {
+                    this.isRemoteScreenSharing = enabled;
+                }),
+            ),
+            "share-screen-remote-changed",
+        );
+
         try {
-            const roomClient = await this.rtc.join({
+            await this.rtc.joinRoom({
                 roomUUID: this.roomUUID,
-                isCreator: this.isCreator,
-                rtcUID: globalStore.rtcUID,
-                channelType: this.rtcChannelType,
+                uid: globalStore.rtcUID,
+                role: this.isCreator ? FlatRTCRole.Host : FlatRTCRole.Audience,
+                token: globalStore.rtcToken,
+                mode:
+                    this.recordingConfig.channelType === RtcChannelType.Broadcast
+                        ? FlatRTCMode.Broadcast
+                        : FlatRTCMode.Communication,
+                refreshToken: generateRTCToken,
+                shareScreenUID: globalStore.rtcShareScreen?.uid || -1,
+                shareScreenToken: globalStore.rtcShareScreen?.token || "",
             });
-            this.shareScreenStore.updateRoomClient(roomClient);
+            this.updateIsJoinedRTC(true);
         } catch (e) {
             console.error(e);
             this.updateCalling(false);
@@ -284,6 +306,7 @@ export class ClassRoomStore {
         }
 
         this.updateCalling(false);
+        this.updateIsJoinedRTC(false);
     };
 
     public toggleCloudStoragePanel = (visible: boolean): void => {
@@ -338,6 +361,15 @@ export class ClassRoomStore {
         if (this.roomInfo) {
             this.roomInfo.roomStatus = roomStatus;
         }
+    };
+
+    public updateShareScreen = (local: boolean, remote: boolean): void => {
+        this.isScreenSharing = local;
+        this.isRemoteScreenSharing = remote;
+    };
+
+    public toggleShareScreen = (force = !this.isScreenSharing): void => {
+        this.rtc.shareScreen.enable(force);
     };
 
     public updateHistory = async (): Promise<void> => {
@@ -449,6 +481,9 @@ export class ClassRoomStore {
 
     public onMessageSend = async (text: string): Promise<void> => {
         if (this.isBan && !this.isCreator) {
+            return;
+        }
+        if (NEED_CHECK_CENSOR && !(await checkRTMCensor({ text })).valid) {
             return;
         }
         await this.rtm.sendMessage(text);
@@ -574,33 +609,30 @@ export class ClassRoomStore {
         // });
         channel.on("MemberLeft", this.users.removeUser);
 
-        this.onRTCEvents();
-    }
-
-    public onRTCEvents(): void {
-        this.rtc.client?.on("network-quality", this.checkNetworkQuality);
-    }
-
-    public offRTCEvents(): void {
-        this.rtc.client?.off("network-quality", this.checkNetworkQuality);
+        this.sideEffect.addDisposer(
+            this.rtc.events.on(
+                "network",
+                action("checkNetworkQuality", networkQuality => {
+                    this.networkQuality = networkQuality;
+                }),
+            ),
+        );
     }
 
     public async destroy(): Promise<void> {
+        this.sideEffect.flushAll();
+
         const promises: Array<Promise<any>> = [];
 
         promises.push(this.rtm.destroy());
 
         promises.push(this.stopRecording());
 
-        promises.push(this.shareScreenStore.destroy());
-
         promises.push(this.rtc.destroy());
 
         promises.push(this.whiteboardStore.destroy());
 
         this.leaveRTC();
-
-        this.offRTCEvents();
 
         window.clearTimeout(this._collectChannelStatusTimeout);
 
@@ -625,6 +657,12 @@ export class ClassRoomStore {
                 case RoomStatus.Started: {
                     this.updateRoomStatusLoading(RoomStatusLoadingType.Starting);
                     await startClass(this.roomUUID);
+                    await roomStore.syncOrdinaryRoomInfo(this.roomUUID);
+                    const roomUUID = this.roomUUID;
+                    const periodicUUID = globalStore.periodicUUID;
+                    if (periodicUUID) {
+                        await roomStore.syncPeriodicSubRoomInfo({ periodicUUID, roomUUID });
+                    }
                     if (this.isCreator && this._userDeviceStatePrePause) {
                         const user = this.users.currentUser;
                         if (user) {
@@ -776,6 +814,10 @@ export class ClassRoomStore {
                     }
                     return true;
                 });
+                // Turn on the microphone automatically.
+                if (accept && userUUID === this.userUUID && this.users.currentUser) {
+                    this.updateDeviceState(userUUID, this.users.currentUser.camera, true);
+                }
             }
         });
 
@@ -998,6 +1040,10 @@ export class ClassRoomStore {
         this.isCalling = isCalling;
     });
 
+    private updateIsJoinedRTC = action("updateIsJoinedRTC", (isJoinedRTC: boolean): void => {
+        this.isJoinedRTC = isJoinedRTC;
+    });
+
     private updateBanStatus = (isBan: boolean): void => {
         this.isBan = isBan;
     };
@@ -1052,14 +1098,6 @@ export class ClassRoomStore {
         this.tempChannelStatus.clear();
         window.clearTimeout(this._collectChannelStatusTimeout);
     }
-
-    private checkNetworkQuality = action(
-        ({ uplinkNetworkQuality, downlinkNetworkQuality }: NetworkQuality): void => {
-            this.networkQuality.uplink = uplinkNetworkQuality;
-            this.networkQuality.downlink = downlinkNetworkQuality;
-            this.networkQuality.delay = this.rtc.getLatency();
-        },
-    );
 }
 
 export interface ClassRoomStoreConfig {

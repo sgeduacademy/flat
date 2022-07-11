@@ -22,6 +22,7 @@ import {
     SVGMenuUnfold,
     SVGModeLecture,
     SVGModeInteractive,
+    WindowsSystemBtnItem,
 } from "flat-components";
 
 import InviteButton from "../../components/InviteButton";
@@ -50,6 +51,7 @@ import { useWindowSize } from "../../utils/hooks/use-window-size";
 import { CloudStorageButton } from "../../components/CloudStorageButton";
 import { runtime } from "../../utils/runtime";
 import { ShareScreen, ShareScreenPicker } from "../../components/ShareScreen";
+import { ipcAsyncByMainWindow } from "../../utils/ipc";
 
 const CLASSROOM_WIDTH = 1200;
 const AVATAR_AREA_WIDTH = CLASSROOM_WIDTH - 16 * 2;
@@ -99,7 +101,6 @@ export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassP
         i18n,
     });
     const whiteboardStore = classRoomStore.whiteboardStore;
-    const shareScreenStore = classRoomStore.shareScreenStore;
 
     const { confirm, ...exitConfirmModalProps } = useExitRoomConfirmModal(classRoomStore);
 
@@ -109,6 +110,7 @@ export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassP
 
     const updateLayoutTimeoutRef = useRef(NaN);
     const loadingPageRef = useRef(false);
+    const topBarRef = useRef<HTMLDivElement>(null);
 
     // control whiteboard writable
     useEffect(() => {
@@ -122,6 +124,16 @@ export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassP
         // dumb exhaustive-deps
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [classRoomStore.classMode, whiteboardStore.room, classRoomStore.users.currentUser?.isSpeak]);
+
+    // Turn off the microphone automatically when it becomes lecture mode.
+    useEffect(() => {
+        if (!classRoomStore.isCreator && whiteboardStore.room) {
+            const currentUser = classRoomStore.users.currentUser;
+            if (classRoomStore.classMode === ClassModeType.Lecture && currentUser) {
+                classRoomStore.updateDeviceState(currentUser.userUUID, currentUser.camera, false);
+            }
+        }
+    }, [classRoomStore, classRoomStore.classMode, whiteboardStore.room]);
 
     useEffect(() => {
         if (classRoomStore.isRecording) {
@@ -142,6 +154,22 @@ export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassP
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [classRoomStore.users.totalUserCount, classRoomStore.isRecording]);
 
+    useEffect(() => {
+        const handleMaximize = (): void => {
+            ipcAsyncByMainWindow("set-win-status", { windowStatus: "maximize" });
+        };
+
+        const topBarEl = topBarRef.current;
+        if (topBarEl) {
+            topBarEl.addEventListener("dblclick", handleMaximize);
+            return () => {
+                topBarEl.removeEventListener("dblclick", handleMaximize);
+            };
+        }
+
+        return;
+    }, []);
+
     if (!room || phase === RoomPhase.Connecting || phase === RoomPhase.Disconnecting) {
         loadingPageRef.current = true;
     } else {
@@ -152,49 +180,60 @@ export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassP
     }
 
     function handleShareScreen(): void {
-        if (shareScreenStore.enableShareScreenStatus) {
-            shareScreenStore.close().catch(console.error);
+        if (classRoomStore.isScreenSharing) {
+            classRoomStore.toggleShareScreen(false);
         } else {
-            shareScreenStore.updateShowShareScreenPicker(true);
+            classRoomStore.updateShowShareScreenPicker(true);
         }
     }
 
+    const onClickWindowsSystemBtn = (winSystemBtn: WindowsSystemBtnItem): void => {
+        ipcAsyncByMainWindow("set-win-status", { windowStatus: winSystemBtn });
+    };
+
     return (
-        <div className="small-class-realtime-container">
-            {loadingPageRef.current && <LoadingPage onTimeout="full-reload" />}
-            <div className="small-class-realtime-box">
-                <TopBar
-                    center={renderTopBarCenter()}
-                    isMac={runtime.isMac}
-                    left={renderTopBarLeft()}
-                    right={renderTopBarRight()}
-                />
-                {classRoomStore.isRTCJoined && renderAvatars()}
-                <div className="small-class-realtime-content">
-                    <div className="small-class-realtime-content-container">
-                        <ShareScreen shareScreenStore={shareScreenStore} />
-                        <ShareScreenPicker
-                            handleOk={() => {
-                                shareScreenStore.enable();
-                            }}
-                            shareScreenStore={shareScreenStore}
-                        />
-                        <Whiteboard
-                            classRoomStore={classRoomStore}
-                            disableHandRaising={
-                                classRoomStore.classMode === ClassModeType.Interaction
-                            }
-                            whiteboardStore={whiteboardStore}
-                        />
+        <div className="small-class-page-container">
+            <div className="small-class-realtime-container">
+                {loadingPageRef.current && <LoadingPage onTimeout="full-reload" />}
+                <div className="small-class-realtime-box">
+                    <TopBar
+                        center={renderTopBarCenter()}
+                        isMac={runtime.isMac}
+                        left={renderTopBarLeft()}
+                        right={renderTopBarRight()}
+                        topBarRef={topBarRef}
+                        onClickWindowsSystemBtn={onClickWindowsSystemBtn}
+                    />
+                    {renderAvatars()}
+                    <div className="small-class-realtime-content">
+                        <div className="small-class-realtime-content-container">
+                            <ShareScreen classRoomStore={classRoomStore} />
+                            <ShareScreenPicker
+                                classRoomStore={classRoomStore}
+                                handleOk={() => {
+                                    classRoomStore.toggleShareScreen(true);
+                                }}
+                            />
+                            <Whiteboard
+                                classRoomStore={classRoomStore}
+                                disableHandRaising={
+                                    classRoomStore.classMode === ClassModeType.Interaction
+                                }
+                                whiteboardStore={whiteboardStore}
+                            />
+                        </div>
+                        {renderRealtimePanel()}
                     </div>
-                    {renderRealtimePanel()}
+                    <ExitRoomConfirm
+                        isCreator={classRoomStore.isCreator}
+                        {...exitConfirmModalProps}
+                    />
+                    <RoomStatusStoppedModal
+                        isCreator={classRoomStore.isCreator}
+                        isRemoteLogin={classRoomStore.isRemoteLogin}
+                        roomStatus={classRoomStore.roomStatus}
+                    />
                 </div>
-                <ExitRoomConfirm isCreator={classRoomStore.isCreator} {...exitConfirmModalProps} />
-                <RoomStatusStoppedModal
-                    isCreator={classRoomStore.isCreator}
-                    isRemoteLogin={classRoomStore.isRemoteLogin}
-                    roomStatus={classRoomStore.roomStatus}
-                />
             </div>
         </div>
     );
@@ -205,18 +244,23 @@ export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassP
                 className="small-class-realtime-avatars-wrap"
                 style={{ maxWidth: `${whiteboardStore.smallClassAvatarWrapMaxWidth}px` }}
             >
-                <div className="small-class-realtime-avatars">
-                    <RTCAvatar
-                        avatarUser={classRoomStore.users.creator}
-                        isAvatarUserCreator={true}
-                        isCreator={true}
-                        rtc={classRoomStore.rtc}
-                        small={true}
-                        updateDeviceState={classRoomStore.updateDeviceState}
-                        userUUID={classRoomStore.userUUID}
-                    />
-                    {classRoomStore.users.joiners.map(renderAvatar)}
-                </div>
+                {classRoomStore.isJoinedRTC && (
+                    <div className="small-class-realtime-avatars">
+                        <RTCAvatar
+                            avatarUser={classRoomStore.users.creator}
+                            isAvatarUserCreator={true}
+                            isCreator={classRoomStore.isCreator}
+                            rtcAvatar={
+                                classRoomStore.users.creator &&
+                                classRoomStore.rtc.getAvatar(classRoomStore.users.creator.rtcUID)
+                            }
+                            small={true}
+                            updateDeviceState={classRoomStore.updateDeviceState}
+                            userUUID={classRoomStore.userUUID}
+                        />
+                        {classRoomStore.users.joiners.map(renderAvatar)}
+                    </div>
+                )}
             </div>
         );
     }
@@ -246,20 +290,20 @@ export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassP
         return classRoomStore.classMode === ClassModeType.Lecture ? (
             <TopBarRoundBtn
                 dark
-                icon={<SVGModeInteractive />}
-                title={t("lecture-mode")}
+                icon={<SVGModeLecture />}
+                title={t("switch-to-interactive-mode")}
                 onClick={classRoomStore.toggleClassMode}
             >
-                {t("switch-to-interactive-mode")}
+                {t("lecture-mode")}
             </TopBarRoundBtn>
         ) : (
             <TopBarRoundBtn
                 dark
-                icon={<SVGModeLecture />}
-                title={t("interactive-mode")}
+                icon={<SVGModeInteractive />}
+                title={t("switch-to-lecture-mode")}
                 onClick={classRoomStore.toggleClassMode}
             >
-                {t("switch-to-lecture-mode")}
+                {t("interactive-mode")}
             </TopBarRoundBtn>
         );
     }
@@ -274,11 +318,9 @@ export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassP
     function renderTopBarRight(): React.ReactNode {
         return (
             <>
-                {whiteboardStore.isWritable && !shareScreenStore.existOtherShareScreen && (
+                {whiteboardStore.isWritable && !classRoomStore.isRemoteScreenSharing && (
                     <TopBarRightBtn
-                        icon={
-                            <SVGScreenSharing active={shareScreenStore.enableShareScreenStatus} />
-                        }
+                        icon={<SVGScreenSharing active={classRoomStore.isScreenSharing} />}
                         title={t("share-screen.self")}
                         onClick={handleShareScreen}
                     />
@@ -299,12 +341,14 @@ export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassP
                 {/* TODO: open cloud-storage sub window */}
                 <CloudStorageButton classroom={classRoomStore} />
                 <InviteButton roomInfo={classRoomStore.roomInfo} />
-                <TopBarRightBtn
-                    icon={<SVGExit />}
-                    title={t("exit")}
-                    onClick={() => confirm(ExitRoomConfirmType.ExitButton)}
-                />
-                <TopBarDivider />
+                {runtime.isMac && (
+                    <TopBarRightBtn
+                        icon={<SVGExit />}
+                        title={t("exit")}
+                        onClick={() => confirm(ExitRoomConfirmType.ExitButton)}
+                    />
+                )}
+                {runtime.isMac && <TopBarDivider />}
                 <TopBarRightBtn
                     icon={isRealtimeSideOpen ? <SVGMenuUnfold /> : <SVGMenuFold />}
                     title={isRealtimeSideOpen ? t("side-panel.hide") : t("side-panel.show")}
@@ -313,6 +357,7 @@ export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassP
                         whiteboardStore.setRightSideClose(isRealtimeSideOpen);
                     }}
                 />
+                {runtime.isMac && <TopBarDivider />}
             </>
         );
     }
@@ -335,9 +380,19 @@ export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassP
                 avatarUser={user}
                 isAvatarUserCreator={false}
                 isCreator={classRoomStore.isCreator}
-                rtc={classRoomStore.rtc}
+                rtcAvatar={classRoomStore.rtc.getAvatar(user.rtcUID)}
                 small={true}
-                updateDeviceState={classRoomStore.updateDeviceState}
+                updateDeviceState={(uid, camera, mic) => {
+                    // Disallow toggling mic when not speak.
+                    const _mic =
+                        whiteboardStore.isWritable ||
+                        user.userUUID === classRoomStore.ownerUUID ||
+                        user.userUUID !== classRoomStore.users.currentUser?.userUUID ||
+                        classRoomStore.classMode !== ClassModeType.Lecture
+                            ? mic
+                            : user.mic;
+                    classRoomStore.updateDeviceState(uid, camera, _mic);
+                }}
                 userUUID={classRoomStore.userUUID}
             />
         );

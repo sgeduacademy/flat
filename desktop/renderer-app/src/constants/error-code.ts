@@ -42,6 +42,10 @@ export enum RequestErrorCode {
     LoginGithubSuspended = 900000, // https://docs.github.com/en/developers/apps/troubleshooting-authorization-request-errors
     LoginGithubURLMismatch,
     LoginGithubAccessDenied,
+
+    SMSVerificationCodeInvalid = 110000, // verification code invalid
+    SMSAlreadyExist, // phone already exist
+    SMSAlreadyBinding, // phone are binding by other users
 }
 
 export const RequestErrorMessage = {
@@ -76,6 +80,10 @@ export const RequestErrorMessage = {
     [RequestErrorCode.UserNotFound]: "user-does-not-exist",
 
     [RequestErrorCode.RecordNotFound]: "replay-does-not-exist",
+
+    [RequestErrorCode.SMSVerificationCodeInvalid]: "login-phone-verification-code-invalid",
+    [RequestErrorCode.SMSAlreadyExist]: "login-phone-already-exist",
+    [RequestErrorCode.SMSAlreadyBinding]: "phone-already-binding",
 
     // TODO: translate messages below
     [RequestErrorCode.UploadConcurrentLimit]: "upload-concurrent-limit",

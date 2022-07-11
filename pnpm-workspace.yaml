@@ -1,0 +1,5 @@
+workspaces:
+  - "desktop/**"
+  - "web/**"
+  - "packages/**"
+  - "services/**"

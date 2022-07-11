@@ -17,6 +17,7 @@ module.exports = {
         "downloaders",
         "Magix",
         "quickstart",
+        "signup",
 
         // wechat
         "wechat",
@@ -99,6 +100,12 @@ module.exports = {
         "commitlintrc", // @commitlint/cli
         "unpublish", // agora-rtc-sdk-ng
         "multipass", // svgo
+        "allowlist", // webpack-node-externals
+        "Wyri", // WyriHaximus/github-action-helm3@v2
+        "Haximus", // WyriHaximus/github-action-helm3@v2
+        "dorny", // dorny/paths-filter@v2
+        "peaceiris", // peaceiris/actions-gh-pages@v3
+        "plyr", // @netless/app-plyr
 
         // less
         "isstring",
@@ -125,6 +132,11 @@ module.exports = {
         "micromessenger",
         "bokeh",
         "lintstagedrc",
+        "pnpm",
+        "emittery",
+        "APPVERSION",
+        "eslintignore",
+        "corepack",
 
         // CNCF
         "nindent",
@@ -135,9 +147,16 @@ module.exports = {
         "Kube",
         "agoraflat",
         "applinks",
+        "dockerignore",
+        "DOCKERHUB",
+        "kubeconfig",
 
         // readme
         "customizational",
+
+        // vscode
+        "dbaeumer",
+        "keystyle",
     ],
     flagWords: ["fuck", "bitch", "asshole", "bullshit", "crap", "suck", "wtf"],
     dictionaries: [
@@ -161,7 +180,7 @@ module.exports = {
         "desktop/main-app/release/**",
         "desktop/main-app/static/**",
         "cspell.config.js",
-        "yarn.lock",
+        "pnpm-lock.yaml",
         "CHANGELOG.md",
     ],
 };

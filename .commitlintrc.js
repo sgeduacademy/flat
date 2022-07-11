@@ -26,6 +26,7 @@ module.exports = {
             "always",
             [
                 "ci",
+                "cloud-storage",
                 "desktop",
                 "deployment",
                 "electron",
@@ -57,7 +58,12 @@ module.exports = {
                 "style",
                 "room",
                 "classroom",
-                "assets"
+                "assets",
+                "login",
+                "config",
+                "flat-rtc",
+                "pnpm",
+                "server",
             ],
         ],
         "scope-case": [2, "always", ["lower-case", "kebab-case"]],

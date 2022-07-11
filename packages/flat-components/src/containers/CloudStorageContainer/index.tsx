@@ -1,6 +1,6 @@
 import "./style.less";
 
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react-lite";
 import { Button, Dropdown, Menu } from "antd";
 import { FormOutlined } from "@ant-design/icons";
@@ -55,8 +55,22 @@ const onDragOver = (event: React.DragEvent<HTMLDivElement>): void => {
 export const CloudStorageContainer = observer<CloudStorageContainerProps>(
     function CloudStorageContainer({ store }) {
         const { t } = useTranslation();
-
+        const cloudStorageContainerRef = useRef<HTMLDivElement>(null);
+        const [skeletonsVisible, setSkeletonsVisible] = useState(false);
         const [isH5PanelVisible, setH5PanelVisible] = useState(false);
+        const [isAtTheBottom, setIsAtTheBottom] = useState(false);
+
+        // Wait 200ms before showing skeletons to reduce flashing.
+        useEffect(() => {
+            const ticket = window.setTimeout(() => setSkeletonsVisible(true), 200);
+            return () => window.clearTimeout(ticket);
+        }, []);
+
+        useEffect(() => {
+            if (isAtTheBottom) {
+                void store.fetchMoreCloudStorageData(store.cloudStorageDataPagination + 1);
+            }
+        }, [isAtTheBottom, store]);
 
         const handleMenuClick = useCallback(({ key }: { key: string }) => {
             if (key === "h5") {
@@ -99,6 +113,19 @@ export const CloudStorageContainer = observer<CloudStorageContainerProps>(
             </div>
         );
 
+        const onCloudStorageListScroll = (): void => {
+            if (cloudStorageContainerRef.current) {
+                const scrollViewOffsetY = cloudStorageContainerRef.current.scrollTop;
+                const scrollViewFrameHeight = cloudStorageContainerRef.current.clientHeight;
+                const scrollViewContentHeight = cloudStorageContainerRef.current.scrollHeight;
+                // Computer environment of each user using the Flat is different that
+                // there maybe can't scroll to the bottom and therefore the isAtTheBottom always false then can't fetch more data.
+                // As a result, there setting a threshold value to avoid above scenes.
+                const threshold = scrollViewContentHeight - 30;
+                setIsAtTheBottom(Math.ceil(scrollViewOffsetY + scrollViewFrameHeight) >= threshold);
+            }
+        };
+
         return (
             <div className="cloud-storage-container" onDragOver={onDragOver} onDrop={onDrop}>
                 {!store.compact && (
@@ -118,12 +145,19 @@ export const CloudStorageContainer = observer<CloudStorageContainerProps>(
                         {containerBtns}
                     </div>
                 )}
-                <div className="cloud-storage-container-file-list fancy-scrollbar">
+                <div
+                    ref={cloudStorageContainerRef}
+                    className="cloud-storage-container-file-list fancy-scrollbar"
+                    onScroll={onCloudStorageListScroll}
+                >
                     {store.totalUsageHR ? (
-                        <CloudStorageFileListContainer store={store} />
-                    ) : (
+                        <CloudStorageFileListContainer
+                            isLoadingData={store.isFetchingFiles}
+                            store={store}
+                        />
+                    ) : skeletonsVisible ? (
                         <CloudStorageSkeletons isCompactMode={store.compact} />
-                    )}
+                    ) : null}
                 </div>
                 <CSSTransition
                     mountOnEnter

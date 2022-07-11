@@ -10,26 +10,6 @@
   "i18n-ally.sourceLanguage": "zh-CN",
   "i18n-ally.displayLanguage": "zh-CN",
   "eslint.enable": true,
-  "eslint.workingDirectories": [
-    {
-      "directory": "desktop/main-app",
-      "changeProcessCWD": true
-    },
-    {
-      "directory": "desktop/renderer-app",
-      "changeProcessCWD": true
-    },
-    {
-      "directory": "web/flat-web",
-      "changeProcessCWD": true
-    },
-    {
-      "directory": "packages/flat-components",
-      "changeProcessCWD": true
-    },
-    {
-      "directory": "packages/flat-types",
-      "changeProcessCWD": true
-    }
-  ]
+  "eslint.format.enable": true,
+  "typescript.tsdk": "node_modules/typescript/lib"
 }

@@ -3,6 +3,7 @@ import { message } from "antd";
 import { RoomPhase } from "white-web-sdk";
 import { observer } from "mobx-react-lite";
 import { useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
     NetworkStatus,
     RoomInfo,
@@ -45,8 +46,8 @@ import "./SmallClassPage.less";
 import { CloudStorageButton } from "../../components/CloudStorageButton";
 import { runtime } from "../../utils/runtime";
 import { RtcChannelType } from "../../api-middleware/rtc/room";
-import { useTranslation } from "react-i18next";
 import { ShareScreen } from "../../components/ShareScreen";
+import { useLoginCheck } from "../utils/use-login-check";
 
 const CLASSROOM_WIDTH = 1200;
 const AVATAR_AREA_WIDTH = CLASSROOM_WIDTH - 16 * 2;
@@ -83,6 +84,7 @@ const recordingConfig: RecordingConfig = Object.freeze({
 export type SmallClassPageProps = {};
 
 export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassPage() {
+    useLoginCheck();
     const { i18n, t } = useTranslation();
     const params = useParams<RouteParams<RouteNameType.SmallClassPage>>();
 
@@ -93,7 +95,6 @@ export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassP
         i18n,
     });
     const whiteboardStore = classRoomStore.whiteboardStore;
-    const shareScreenStore = classRoomStore.shareScreenStore;
 
     const { confirm, ...exitConfirmModalProps } = useExitRoomConfirmModal(classRoomStore);
 
@@ -116,6 +117,16 @@ export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassP
         // dumb exhaustive-deps
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [classRoomStore.classMode, whiteboardStore.room, classRoomStore.users.currentUser?.isSpeak]);
+
+    // Turn off the microphone automatically when it becomes lecture mode.
+    useEffect(() => {
+        if (!classRoomStore.isCreator && whiteboardStore.room) {
+            const currentUser = classRoomStore.users.currentUser;
+            if (classRoomStore.classMode === ClassModeType.Lecture && currentUser) {
+                classRoomStore.updateDeviceState(currentUser.userUUID, currentUser.camera, false);
+            }
+        }
+    }, [classRoomStore, classRoomStore.classMode, whiteboardStore.room]);
 
     useEffect(() => {
         if (classRoomStore.isRecording) {
@@ -145,10 +156,6 @@ export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassP
         loadingPageRef.current = false;
     }
 
-    function handleShareScreen(): void {
-        void shareScreenStore.toggle();
-    }
-
     return (
         <div className="small-class-realtime-container">
             {loadingPageRef.current && <LoadingPage onTimeout="full-reload" />}
@@ -162,7 +169,7 @@ export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassP
                 {renderAvatars()}
                 <div className="small-class-realtime-content">
                     <div className="small-class-realtime-content-container">
-                        <ShareScreen shareScreenStore={shareScreenStore} />
+                        <ShareScreen classRoomStore={classRoomStore} />
                         <Whiteboard
                             classRoomStore={classRoomStore}
                             disableHandRaising={
@@ -189,18 +196,23 @@ export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassP
                 className="small-class-realtime-avatars-wrap"
                 style={{ maxWidth: `${whiteboardStore.smallClassAvatarWrapMaxWidth}px` }}
             >
-                <div className="small-class-realtime-avatars">
-                    <RTCAvatar
-                        avatarUser={classRoomStore.users.creator}
-                        isAvatarUserCreator={true}
-                        isCreator={true}
-                        rtcRoom={classRoomStore.rtc}
-                        small={true}
-                        updateDeviceState={classRoomStore.updateDeviceState}
-                        userUUID={classRoomStore.userUUID}
-                    />
-                    {classRoomStore.users.joiners.map(renderAvatar)}
-                </div>
+                {classRoomStore.isJoinedRTC && (
+                    <div className="small-class-realtime-avatars">
+                        <RTCAvatar
+                            avatarUser={classRoomStore.users.creator}
+                            isAvatarUserCreator={true}
+                            isCreator={classRoomStore.isCreator}
+                            rtcAvatar={
+                                classRoomStore.users.creator &&
+                                classRoomStore.rtc.getAvatar(classRoomStore.users.creator.rtcUID)
+                            }
+                            small={true}
+                            updateDeviceState={classRoomStore.updateDeviceState}
+                            userUUID={classRoomStore.userUUID}
+                        />
+                        {classRoomStore.users.joiners.map(renderAvatar)}
+                    </div>
+                )}
             </div>
         );
     }
@@ -230,20 +242,20 @@ export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassP
         return classRoomStore.classMode === ClassModeType.Lecture ? (
             <TopBarRoundBtn
                 dark
-                icon={<SVGModeInteractive />}
-                title={t("lecture-mode")}
+                icon={<SVGModeLecture />}
+                title={t("switch-to-interactive-mode")}
                 onClick={classRoomStore.toggleClassMode}
             >
-                {t("switch-to-interactive-mode")}
+                {t("lecture-mode")}
             </TopBarRoundBtn>
         ) : (
             <TopBarRoundBtn
                 dark
-                icon={<SVGModeLecture />}
-                title={t("interactive-mode")}
+                icon={<SVGModeInteractive />}
+                title={t("switch-to-lecture-mode")}
                 onClick={classRoomStore.toggleClassMode}
             >
-                {t("switch-to-lecture-mode")}
+                {t("interactive-mode")}
             </TopBarRoundBtn>
         );
     }
@@ -258,13 +270,11 @@ export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassP
     function renderTopBarRight(): React.ReactNode {
         return (
             <>
-                {whiteboardStore.isWritable && !shareScreenStore.existOtherUserStream && (
+                {whiteboardStore.isWritable && !classRoomStore.isRemoteScreenSharing && (
                     <TopBarRightBtn
-                        icon={
-                            <SVGScreenSharing active={shareScreenStore.enableShareScreenStatus} />
-                        }
+                        icon={<SVGScreenSharing active={classRoomStore.isScreenSharing} />}
                         title={t("share-screen.self")}
-                        onClick={handleShareScreen}
+                        onClick={() => classRoomStore.toggleShareScreen()}
                     />
                 )}
 
@@ -318,9 +328,19 @@ export const SmallClassPage = observer<SmallClassPageProps>(function SmallClassP
                 avatarUser={user}
                 isAvatarUserCreator={false}
                 isCreator={classRoomStore.isCreator}
-                rtcRoom={classRoomStore.rtc}
+                rtcAvatar={classRoomStore.rtc.getAvatar(user.rtcUID)}
                 small={true}
-                updateDeviceState={classRoomStore.updateDeviceState}
+                updateDeviceState={(uid, camera, mic) => {
+                    // Disallow toggling mic when not speak.
+                    const _mic =
+                        whiteboardStore.isWritable ||
+                        user.userUUID === classRoomStore.ownerUUID ||
+                        user.userUUID !== classRoomStore.users.currentUser?.userUUID ||
+                        classRoomStore.classMode !== ClassModeType.Lecture
+                            ? mic
+                            : user.mic;
+                    classRoomStore.updateDeviceState(uid, camera, _mic);
+                }}
                 userUUID={classRoomStore.userUUID}
             />
         );

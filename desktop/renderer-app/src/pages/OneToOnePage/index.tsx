@@ -18,6 +18,7 @@ import {
     SVGExit,
     SVGMenuFold,
     SVGMenuUnfold,
+    WindowsSystemBtnItem,
 } from "flat-components";
 
 import InviteButton from "../../components/InviteButton";
@@ -43,6 +44,7 @@ import { AgoraCloudRecordBackgroundConfigItem } from "../../api-middleware/flatS
 import { runtime } from "../../utils/runtime";
 import { useTranslation } from "react-i18next";
 import { ShareScreen, ShareScreenPicker } from "../../components/ShareScreen";
+import { ipcAsyncByMainWindow } from "../../utils/ipc";
 
 const recordingConfig: RecordingConfig = Object.freeze({
     channelType: RtcChannelType.Communication,
@@ -75,7 +77,6 @@ export const OneToOnePage = observer<OneToOnePageProps>(function OneToOnePage() 
         i18n,
     });
     const whiteboardStore = classRoomStore.whiteboardStore;
-    const shareScreenStore = classRoomStore.shareScreenStore;
 
     const { confirm, ...exitConfirmModalProps } = useExitRoomConfirmModal(classRoomStore);
 
@@ -83,6 +84,7 @@ export const OneToOnePage = observer<OneToOnePageProps>(function OneToOnePage() 
 
     const updateLayoutTimeoutRef = useRef(NaN);
     const loadingPageRef = useRef(false);
+    const topBarRef = useRef<HTMLDivElement>(null);
 
     const joiner = useComputed(() => {
         if (classRoomStore.isCreator) {
@@ -122,6 +124,22 @@ export const OneToOnePage = observer<OneToOnePageProps>(function OneToOnePage() 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [classRoomStore.users.creator, joiner, classRoomStore.isRecording]);
 
+    useEffect(() => {
+        const handleMaximize = (): void => {
+            ipcAsyncByMainWindow("set-win-status", { windowStatus: "maximize" });
+        };
+
+        const topBarEl = topBarRef.current;
+        if (topBarEl) {
+            topBarEl.addEventListener("dblclick", handleMaximize);
+            return () => {
+                topBarEl.removeEventListener("dblclick", handleMaximize);
+            };
+        }
+
+        return;
+    }, []);
+
     if (
         !whiteboardStore.room ||
         whiteboardStore.phase === RoomPhase.Connecting ||
@@ -136,45 +154,56 @@ export const OneToOnePage = observer<OneToOnePageProps>(function OneToOnePage() 
     }
 
     function handleShareScreen(): void {
-        if (shareScreenStore.enableShareScreenStatus) {
-            shareScreenStore.close().catch(console.error);
+        if (classRoomStore.isScreenSharing) {
+            classRoomStore.toggleShareScreen(false);
         } else {
-            shareScreenStore.updateShowShareScreenPicker(true);
+            classRoomStore.updateShowShareScreenPicker(true);
         }
     }
 
+    const onClickWindowsSystemBtn = (winSystemBtn: WindowsSystemBtnItem): void => {
+        ipcAsyncByMainWindow("set-win-status", { windowStatus: winSystemBtn });
+    };
+
     return (
-        <div className="one-to-one-realtime-container">
-            {loadingPageRef.current && <LoadingPage onTimeout="full-reload" />}
-            <div className="one-to-one-realtime-box">
-                <TopBar
-                    isMac={runtime.isMac}
-                    left={renderTopBarLeft()}
-                    right={renderTopBarRight()}
-                />
-                <div className="one-to-one-realtime-content">
-                    <div className="one-to-one-realtime-content-container">
-                        <ShareScreen shareScreenStore={shareScreenStore} />
-                        <ShareScreenPicker
-                            handleOk={() => {
-                                shareScreenStore.enable();
-                            }}
-                            shareScreenStore={shareScreenStore}
-                        />
-                        <Whiteboard
-                            classRoomStore={classRoomStore}
-                            disableHandRaising={true}
-                            whiteboardStore={whiteboardStore}
-                        />
+        <div className="one-to-one-page-container">
+            <div className="one-to-one-realtime-container">
+                {loadingPageRef.current && <LoadingPage onTimeout="full-reload" />}
+                <div className="one-to-one-realtime-box">
+                    <TopBar
+                        isMac={runtime.isMac}
+                        left={renderTopBarLeft()}
+                        right={renderTopBarRight()}
+                        topBarRef={topBarRef}
+                        onClickWindowsSystemBtn={onClickWindowsSystemBtn}
+                    />
+                    <div className="one-to-one-realtime-content">
+                        <div className="one-to-one-realtime-content-container">
+                            <ShareScreen classRoomStore={classRoomStore} />
+                            <ShareScreenPicker
+                                classRoomStore={classRoomStore}
+                                handleOk={() => {
+                                    classRoomStore.toggleShareScreen(true);
+                                }}
+                            />
+                            <Whiteboard
+                                classRoomStore={classRoomStore}
+                                disableHandRaising={true}
+                                whiteboardStore={whiteboardStore}
+                            />
+                        </div>
+                        {renderRealtimePanel()}
                     </div>
-                    {renderRealtimePanel()}
+                    <ExitRoomConfirm
+                        isCreator={classRoomStore.isCreator}
+                        {...exitConfirmModalProps}
+                    />
+                    <RoomStatusStoppedModal
+                        isCreator={classRoomStore.isCreator}
+                        isRemoteLogin={classRoomStore.isRemoteLogin}
+                        roomStatus={classRoomStore.roomStatus}
+                    />
                 </div>
-                <ExitRoomConfirm isCreator={classRoomStore.isCreator} {...exitConfirmModalProps} />
-                <RoomStatusStoppedModal
-                    isCreator={classRoomStore.isCreator}
-                    isRemoteLogin={classRoomStore.isRemoteLogin}
-                    roomStatus={classRoomStore.roomStatus}
-                />
             </div>
         </div>
     );
@@ -203,11 +232,9 @@ export const OneToOnePage = observer<OneToOnePageProps>(function OneToOnePage() 
     function renderTopBarRight(): React.ReactNode {
         return (
             <>
-                {whiteboardStore.isWritable && !shareScreenStore.existOtherShareScreen && (
+                {whiteboardStore.isWritable && !classRoomStore.isRemoteScreenSharing && (
                     <TopBarRightBtn
-                        icon={
-                            <SVGScreenSharing active={shareScreenStore.enableShareScreenStatus} />
-                        }
+                        icon={<SVGScreenSharing active={classRoomStore.isScreenSharing} />}
                         title={t("share-screen.self")}
                         onClick={handleShareScreen}
                     />
@@ -228,12 +255,14 @@ export const OneToOnePage = observer<OneToOnePageProps>(function OneToOnePage() 
                 {/* TODO: open cloud-storage sub window */}
                 <CloudStorageButton classroom={classRoomStore} />
                 <InviteButton roomInfo={classRoomStore.roomInfo} />
-                <TopBarRightBtn
-                    icon={<SVGExit />}
-                    title={t("exit")}
-                    onClick={() => confirm(ExitRoomConfirmType.ExitButton)}
-                />
-                <TopBarDivider />
+                {runtime.isMac && (
+                    <TopBarRightBtn
+                        icon={<SVGExit />}
+                        title={t("exit")}
+                        onClick={() => confirm(ExitRoomConfirmType.ExitButton)}
+                    />
+                )}
+                {runtime.isMac && <TopBarDivider />}
                 <TopBarRightBtn
                     icon={isRealtimeSideOpen ? <SVGMenuUnfold /> : <SVGMenuFold />}
                     title={isRealtimeSideOpen ? t("side-panel.hide") : t("side-panel.show")}
@@ -242,6 +271,7 @@ export const OneToOnePage = observer<OneToOnePageProps>(function OneToOnePage() 
                         whiteboardStore.setRightSideClose(isRealtimeSideOpen);
                     }}
                 />
+                {runtime.isWin && <TopBarDivider />}
             </>
         );
     }
@@ -256,28 +286,29 @@ export const OneToOnePage = observer<OneToOnePageProps>(function OneToOnePage() 
                     ></ChatPanel>
                 }
                 isShow={isRealtimeSideOpen}
-                isVideoOn={classRoomStore.isRTCJoined}
+                isVideoOn={classRoomStore.isJoinedRTC}
                 videoSlot={
-                    classRoomStore.isRTCJoined && (
-                        <div className="one-to-one-rtc-avatar-container">
-                            <RTCAvatar
-                                avatarUser={classRoomStore.users.creator}
-                                isAvatarUserCreator={true}
-                                isCreator={classRoomStore.isCreator}
-                                rtc={classRoomStore.rtc}
-                                updateDeviceState={classRoomStore.updateDeviceState}
-                                userUUID={classRoomStore.userUUID}
-                            />
-                            <RTCAvatar
-                                avatarUser={joiner}
-                                isAvatarUserCreator={false}
-                                isCreator={classRoomStore.isCreator}
-                                rtc={classRoomStore.rtc}
-                                updateDeviceState={classRoomStore.updateDeviceState}
-                                userUUID={classRoomStore.userUUID}
-                            />
-                        </div>
-                    )
+                    <div className="one-to-one-rtc-avatar-container">
+                        <RTCAvatar
+                            avatarUser={classRoomStore.users.creator}
+                            isAvatarUserCreator={true}
+                            isCreator={classRoomStore.isCreator}
+                            rtcAvatar={
+                                classRoomStore.users.creator &&
+                                classRoomStore.rtc.getAvatar(classRoomStore.users.creator.rtcUID)
+                            }
+                            updateDeviceState={classRoomStore.updateDeviceState}
+                            userUUID={classRoomStore.userUUID}
+                        />
+                        <RTCAvatar
+                            avatarUser={joiner}
+                            isAvatarUserCreator={false}
+                            isCreator={classRoomStore.isCreator}
+                            rtcAvatar={joiner && classRoomStore.rtc.getAvatar(joiner.rtcUID)}
+                            updateDeviceState={classRoomStore.updateDeviceState}
+                            userUUID={classRoomStore.userUUID}
+                        />
+                    </div>
                 }
             />
         );

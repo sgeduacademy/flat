@@ -1,6 +1,6 @@
 import { Region } from "flat-components";
-import { RoomStatus, RoomType, Sex, Week } from "./constants";
-import { post, postNotAuth } from "./utils";
+import { RoomStatus, RoomType, Week } from "./constants";
+import { post, post2, postNotAuth, PROCESSING } from "./utils";
 
 export interface CreateOrdinaryRoomPayload {
     title: string;
@@ -451,33 +451,30 @@ export async function updatePeriodicSubRoom(payload: UpdatePeriodicSubRoomPayloa
     );
 }
 
-export interface LoginCheckPayload {
-    type: "web" | "mobile";
-}
+export interface LoginCheckPayload {}
 
 export interface LoginCheckResult {
     name: string;
-    sex: Sex;
     avatar: string;
+    token: string;
     userUUID: string;
+    hasPhone: boolean;
 }
 
-export async function loginCheck(): Promise<LoginCheckResult> {
-    return await post<LoginCheckPayload, LoginCheckResult>("login", {
-        type: "web",
-    });
+export async function loginCheck(token?: string): Promise<LoginCheckResult> {
+    return await post<LoginCheckPayload, LoginCheckResult>("login", {}, {}, token);
 }
 
-export interface setAuthUUIDPayload {
+export interface SetAuthUUIDPayload {
     authUUID: string;
 }
 
-export interface setAuthUUIDResult {
+export interface SetAuthUUIDResult {
     authUUID: string;
 }
 
-export async function setAuthUUID(authUUID: string): Promise<setAuthUUIDResult> {
-    return await postNotAuth<setAuthUUIDPayload, setAuthUUIDResult>("login/set-auth-uuid", {
+export async function setAuthUUID(authUUID: string): Promise<SetAuthUUIDResult> {
+    return await postNotAuth<SetAuthUUIDPayload, SetAuthUUIDResult>("login/set-auth-uuid", {
         authUUID,
     });
 }
@@ -488,14 +485,211 @@ export interface LoginProcessPayload {
 
 export interface LoginProcessResult {
     name: string;
-    sex: Sex;
     avatar: string;
     userUUID: string;
     token: string;
+    hasPhone: boolean;
 }
 
 export async function loginProcess(authUUID: string): Promise<LoginProcessResult> {
     return await postNotAuth<LoginProcessPayload, LoginProcessResult>("login/process", {
         authUUID,
     });
+}
+
+export interface LoginPhoneSendCodePayload {
+    phone: string; // +8612345678901
+}
+
+export type LoginPhoneSendCodeResult = {};
+
+export async function loginPhoneSendCode(phone: string): Promise<LoginPhoneSendCodeResult> {
+    return await postNotAuth<LoginPhoneSendCodePayload, LoginPhoneSendCodeResult>(
+        "login/phone/sendMessage",
+        {
+            phone,
+        },
+    );
+}
+
+export interface LoginPhonePayload {
+    phone: string; // +8612345678901
+    code: number; // 123456
+}
+
+export async function loginPhone(phone: string, code: number): Promise<LoginProcessResult> {
+    return await postNotAuth<LoginPhonePayload, LoginProcessResult>("login/phone", {
+        phone,
+        code,
+    });
+}
+
+export interface BindingPhoneSendCodePayload {
+    phone: string; // +8612345678901
+}
+
+export type BindingPhoneSendCodeResult = {};
+
+export async function bindingPhoneSendCode(phone: string): Promise<BindingPhoneSendCodeResult> {
+    return await post<BindingPhoneSendCodePayload, BindingPhoneSendCodeResult>(
+        "user/binding/platform/phone/sendMessage ",
+        {
+            phone,
+        },
+    );
+}
+
+export interface BindingPhonePayload {
+    phone: string; // +8612345678901
+    code: number; // 123456
+}
+
+export type BindingPhoneResult = {};
+
+export async function bindingPhone(phone: string, code: number): Promise<BindingPhoneResult> {
+    return await post<BindingPhonePayload, BindingPhoneResult>("user/binding/platform/phone", {
+        phone,
+        code,
+    });
+}
+
+export interface RenamePayload {
+    name: string;
+}
+
+export type RenameResult = {};
+
+export async function rename(name: string): Promise<RenameResult> {
+    return await post<RenamePayload, RenameResult>("user/rename", {
+        name,
+    });
+}
+
+export interface UploadAvatarStartPayload {
+    fileName: string;
+    fileSize: number;
+    region: Region;
+}
+
+export interface UploadAvatarResult {
+    fileUUID: string;
+    filePath: string;
+    policy: string;
+    policyURL: string;
+    signature: string;
+}
+
+export async function uploadAvatarStart(
+    fileName: string,
+    fileSize: number,
+    region: Region,
+): Promise<UploadAvatarResult> {
+    return await post<UploadAvatarStartPayload, UploadAvatarResult>("user/upload-avatar/start", {
+        fileName,
+        fileSize,
+        region,
+    });
+}
+
+export interface UploadAvatarFinishPayload {
+    fileUUID: string;
+}
+
+export interface UploadAvatarFinishResult {
+    avatarURL: string;
+}
+
+export async function uploadAvatarFinish(fileUUID: string): Promise<UploadAvatarFinishResult> {
+    return await post<UploadAvatarFinishPayload, UploadAvatarFinishResult>(
+        "user/upload-avatar/finish",
+        {
+            fileUUID,
+        },
+    );
+}
+
+export interface ListBindingsPayload {}
+
+export interface ListBindingsResult {
+    wechat: boolean;
+    phone: boolean;
+    agora: boolean;
+    apple: boolean;
+    github: boolean;
+    google: boolean;
+}
+
+export async function listBindings(): Promise<ListBindingsResult> {
+    return await post<ListBindingsPayload, ListBindingsResult>("user/binding/list", {});
+}
+
+export interface SetBindingAuthUUIDResult {}
+
+export async function setBindingAuthUUID(authUUID: string): Promise<void> {
+    await post<SetAuthUUIDPayload, SetBindingAuthUUIDResult>("user/binding/set-auth-uuid", {
+        authUUID,
+    });
+}
+
+export interface BindingProcessResult {
+    processing: boolean;
+    status: boolean;
+}
+
+export async function bindingProcess(authUUID: string): Promise<BindingProcessResult> {
+    try {
+        const ret = await post2<SetAuthUUIDPayload, {}>("user/binding/process", {
+            authUUID,
+        });
+        if (ret === PROCESSING) {
+            return {
+                processing: true,
+                status: false,
+            };
+        }
+        return {
+            processing: false,
+            status: true,
+        };
+    } catch {
+        return {
+            processing: false,
+            status: false,
+        };
+    }
+}
+
+export enum LoginPlatform {
+    WeChat = "WeChat",
+    Github = "Github",
+    Apple = "Apple",
+    Agora = "Agora",
+    Google = "Google",
+    Phone = "Phone",
+}
+
+export interface RemoveBindingPayload {
+    target: LoginPlatform;
+}
+
+export interface RemoveBindingResult {
+    token: string;
+}
+
+export async function removeBinding(target: LoginPlatform): Promise<RemoveBindingResult> {
+    return await post<RemoveBindingPayload, RemoveBindingResult>("user/binding/remove", {
+        target,
+    });
+}
+
+export interface DeleteAccountValidateResult {
+    alreadyJoinedRoomCount: number;
+}
+
+export async function deleteAccountValidate(): Promise<DeleteAccountValidateResult> {
+    return await post<{}, DeleteAccountValidateResult>("user/deleteAccount/validate", {});
+}
+
+export async function deleteAccount(): Promise<void> {
+    await post<{}, {}>("user/deleteAccount", {});
 }

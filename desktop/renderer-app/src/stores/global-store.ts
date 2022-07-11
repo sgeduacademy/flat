@@ -30,6 +30,11 @@ export class GlobalStore {
     public rtmToken: string | null = null;
     public region: Region | null = null;
     public lastLoginCheck: number | null = null;
+    /**
+     * To sync update the roomStore's room information data after call the begin of the class in the classRoomStore,
+     * that for sure roomStore's begin time value of roomInfo is correct so that the classroom page's Timer component display correctly.
+     */
+    public periodicUUID: string | undefined = undefined;
 
     public get userUUID(): string | undefined {
         return this.userInfo?.userUUID;
@@ -43,8 +48,24 @@ export class GlobalStore {
         autoPersistStore({ storeLSName: "GlobalStore", store: this, version: LS_VERSION });
     }
 
-    public updateUserInfo = (userInfo: UserInfo): void => {
+    public updateUserInfo = (userInfo: UserInfo | null): void => {
         this.userInfo = userInfo;
+    };
+
+    public updateUserAvatar = (avatarURL: string): void => {
+        if (this.userInfo) {
+            this.userInfo.avatar = avatarURL;
+        }
+    };
+
+    public updateUserToken = (token: string): void => {
+        if (this.userInfo) {
+            this.userInfo.token = token;
+        }
+    };
+
+    public updateLastLoginCheck = (val: number | null): void => {
+        this.lastLoginCheck = val;
     };
 
     public updateToken = (
@@ -81,6 +102,7 @@ export class GlobalStore {
 
     public logout = (): void => {
         this.userInfo = null;
+        this.lastLoginCheck = null;
     };
 
     public updateCheckNewVersionDate = (): void => {
@@ -97,6 +119,10 @@ export class GlobalStore {
 
     public updateShowGuide = (showGuide: boolean): void => {
         this.isShowGuide = showGuide;
+    };
+
+    public updatePeriodicUUID = (periodicUUID?: string): void => {
+        this.periodicUUID = periodicUUID;
     };
 }
 

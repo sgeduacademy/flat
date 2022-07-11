@@ -1,30 +1,22 @@
-import refresh from "@vitejs/plugin-react-refresh";
+import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import eslintPlugin from "vite-plugin-eslint";
 import { visualizer } from "rollup-plugin-visualizer";
 import copy from "rollup-plugin-copy";
 import path from "path";
 
-// TODO: find new place to store vite-plugin-dotenv
+// TODO: find new place to store vite-plugin-dotenv, vite-plugin-react-virtualized
 import { dotenv } from "../../web/flat-web/scripts/vite-plugin-dotenv";
+import { reactVirtualized } from "../../web/flat-web/scripts/vite-plugin-react-virtualized";
 import { electron } from "./scripts/vite-plugin-electron";
-import {
-    configPath,
-    typesEntryPath,
-    i18nEntryPath,
-    componentsEntryPath,
-    rootNodeModules,
-    rendererPath,
-} from "../../scripts/constants";
+import { rootNodeModules, rendererPath } from "../../scripts/constants";
+import { autoChooseConfig } from "../../scripts/utils/auto-choose-config";
 
 export default defineConfig(() => {
     const plugins = [
-        refresh(),
-        dotenv(configPath),
+        react(),
+        dotenv(autoChooseConfig()),
+        reactVirtualized(),
         electron(),
-        eslintPlugin({
-            cache: false,
-        }),
         copy({
             targets: [
                 /**
@@ -60,22 +52,7 @@ export default defineConfig(() => {
         resolve: {
             alias: [
                 // replace webpack alias
-                {
-                    find: /^~/,
-                    replacement: "",
-                },
-                {
-                    find: "flat-types",
-                    replacement: typesEntryPath,
-                },
-                {
-                    find: "flat-i18n",
-                    replacement: i18nEntryPath,
-                },
-                {
-                    find: "flat-components",
-                    replacement: componentsEntryPath,
-                },
+                { find: /^~/, replacement: "" },
             ],
         },
         build: {

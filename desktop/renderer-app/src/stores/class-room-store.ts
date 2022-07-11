@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import { action, autorun, makeAutoObservable, observable, reaction, runInAction } from "mobx";
 import { v4 as uuidv4 } from "uuid";
 import dateSub from "date-fns/sub";
-import { Rtc as RTCAPI, RtcChannelType } from "../api-middleware/rtc";
+import { SideEffectManager } from "side-effect-manager";
+import i18next, { i18n } from "i18next";
+import { message } from "antd";
+import { FlatRTC, FlatRTCMode, FlatRTCRole, FlatRTCShareScreenInfo } from "@netless/flat-rtc";
+import { RtcChannelType } from "../api-middleware/rtc";
 import {
     ClassModeType,
     NonDefaultUserProp,
@@ -13,8 +17,10 @@ import {
 } from "../api-middleware/rtm";
 import { CloudRecording } from "../api-middleware/cloud-recording";
 import {
+    checkRTMCensor,
     CloudRecordStartPayload,
     CloudRecordUpdateLayoutPayload,
+    generateRTCToken,
 } from "../api-middleware/flatServer/agora";
 import {
     pauseClass,
@@ -30,14 +36,12 @@ import { NODE_ENV } from "../constants/process";
 import { useAutoRun } from "../utils/mobx";
 import { User, UserStore } from "./user-store";
 import { ipcAsyncByMainWindow } from "../utils/ipc";
-import type { AgoraNetworkQuality, RtcStats } from "agora-electron-sdk/types/Api/native_type";
 import { errorTips } from "../components/Tips/ErrorTips";
 import { WhiteboardStore } from "./whiteboard-store";
 import { RouteNameType, usePushHistory } from "../utils/routes";
 import { useSafePromise } from "../utils/hooks/lifecycle";
-import { ShareScreenStore } from "./share-screen-store";
-import i18next, { i18n } from "i18next";
-import { message } from "antd";
+import { getFlatRTC } from "../services/flat-rtc";
+import { NEED_CHECK_CENSOR } from "../constants/config";
 
 export type { User } from "./user-store";
 
@@ -60,6 +64,8 @@ export enum RoomStatusLoadingType {
 }
 
 export class ClassRoomStore {
+    private sideEffect = new SideEffectManager();
+
     public readonly roomUUID: string;
     /** User uuid of the current user */
     public readonly userUUID: string;
@@ -73,12 +79,22 @@ export class ClassRoomStore {
     public isRecording = false;
     /** is RTC on, for UI */
     public isCalling = false;
-    /** is joined RTC channel */
-    public isRTCJoined = false;
+    public isJoinedRTC = false;
     /** is user login on other device */
     public isRemoteLogin = false;
 
     public isCloudStoragePanelVisible = false;
+
+    /** is current user sharing screen */
+    public isScreenSharing = false;
+    /** is other users sharing screen */
+    public isRemoteScreenSharing = false;
+
+    public shareScreenInfo: FlatRTCShareScreenInfo[] = [];
+
+    public showShareScreenPicker = false;
+
+    public selectedScreenInfo: FlatRTCShareScreenInfo | null = null;
 
     public roomStatusLoading = RoomStatusLoadingType.Null;
 
@@ -90,15 +106,11 @@ export class ClassRoomStore {
 
     public readonly users: UserStore;
 
-    public readonly rtcChannelType: RtcChannelType;
-
-    public readonly rtc: RTCAPI;
+    public readonly rtc: FlatRTC;
     public readonly rtm: RTMAPI;
     public readonly cloudRecording: CloudRecording;
 
     public readonly whiteboardStore: WhiteboardStore;
-
-    public readonly shareScreenStore: ShareScreenStore;
 
     /** This ownerUUID is from url params matching which cannot be trusted */
     private readonly ownerUUIDFromParams: string;
@@ -135,15 +147,19 @@ export class ClassRoomStore {
         this.userUUID = globalStore.userUUID;
         this.recordingConfig = config.recordingConfig;
         this.classMode = config.classMode ?? ClassModeType.Lecture;
-        this.rtcChannelType = config.recordingConfig.channelType ?? RtcChannelType.Communication;
 
-        this.rtc = new RTCAPI();
+        this.rtc = getFlatRTC();
         this.rtm = new RTMAPI();
         this.cloudRecording = new CloudRecording({ roomUUID: config.roomUUID });
 
         makeAutoObservable<
             this,
-            "_noMoreRemoteMessages" | "_collectChannelStatusTimeout" | "_userDeviceStatePrePause"
+            | "_noMoreRemoteMessages"
+            | "_collectChannelStatusTimeout"
+            | "_userDeviceStatePrePause"
+            | "sideEffect"
+            | "shareScreenInfo"
+            | "selectedScreenInfo"
         >(this, {
             rtc: observable.ref,
             rtm: observable.ref,
@@ -151,6 +167,9 @@ export class ClassRoomStore {
             _noMoreRemoteMessages: false,
             _collectChannelStatusTimeout: false,
             _userDeviceStatePrePause: false,
+            sideEffect: false,
+            shareScreenInfo: observable.ref,
+            selectedScreenInfo: observable.ref,
         });
 
         this.users = new UserStore({
@@ -166,8 +185,6 @@ export class ClassRoomStore {
             onDrop: this.onDrop,
         });
 
-        this.shareScreenStore = new ShareScreenStore(this.roomUUID);
-
         autorun(reaction => {
             if (this.whiteboardStore.isKicked) {
                 reaction.dispose();
@@ -176,16 +193,6 @@ export class ClassRoomStore {
                 });
             }
         });
-
-        reaction(
-            () => this.whiteboardStore.isWritable,
-            () => {
-                this.shareScreenStore.updateIsWritable(this.whiteboardStore.isWritable);
-            },
-            {
-                fireImmediately: true,
-            },
-        );
 
         reaction(
             () => this.isRecording,
@@ -205,6 +212,15 @@ export class ClassRoomStore {
         this.rtm.on(RTMessageType.CONNECTED, () => {
             return this.updateInitialRoomState();
         });
+
+        this.sideEffect.addDisposer(
+            this.rtc.events.on(
+                "network",
+                action("checkNetworkQuality", networkQuality => {
+                    this.networkQuality = networkQuality;
+                }),
+            ),
+        );
     }
 
     public get ownerUUID(): string {
@@ -261,13 +277,41 @@ export class ClassRoomStore {
 
         this.updateCalling(true);
 
+        this.sideEffect.addDisposer(
+            this.rtc.shareScreen.events.on(
+                "local-changed",
+                action("localShareScreen", enabled => {
+                    this.isScreenSharing = enabled;
+                }),
+            ),
+            "share-screen-local-changed",
+        );
+
+        this.sideEffect.addDisposer(
+            this.rtc.shareScreen.events.on(
+                "remote-changed",
+                action("remoteShareScreen", enabled => {
+                    this.isRemoteScreenSharing = enabled;
+                }),
+            ),
+            "share-screen-remote-changed",
+        );
+
         try {
-            await this.rtc.join({
+            await this.rtc.joinRoom({
                 roomUUID: this.roomUUID,
-                isCreator: this.isCreator,
-                rtcUID: globalStore.rtcUID,
-                channelType: this.rtcChannelType,
+                uid: globalStore.rtcUID,
+                token: globalStore.rtcToken,
+                mode:
+                    this.recordingConfig.channelType === RtcChannelType.Broadcast
+                        ? FlatRTCMode.Broadcast
+                        : FlatRTCMode.Communication,
+                role: this.isCreator ? FlatRTCRole.Host : FlatRTCRole.Audience,
+                refreshToken: generateRTCToken,
+                shareScreenUID: globalStore.rtcShareScreen?.uid || -1,
+                shareScreenToken: globalStore.rtcShareScreen?.token || "",
             });
+            this.updateIsJoinedRTC(true);
         } catch (e) {
             console.error(e);
             this.updateCalling(false);
@@ -297,7 +341,8 @@ export class ClassRoomStore {
         this.updateCalling(false);
 
         try {
-            this.rtc.leave();
+            this.rtc.leaveRoom();
+            this.updateIsJoinedRTC(false);
         } catch (e) {
             console.error(e);
             this.updateCalling(true);
@@ -345,6 +390,31 @@ export class ClassRoomStore {
         if (this.roomInfo) {
             this.roomInfo.roomStatus = roomStatus;
         }
+    };
+
+    public refreshShareScreenInfo = async (): Promise<void> => {
+        this.updateSelectedScreenInfo(null);
+        this.shareScreenInfo = [];
+        this.shareScreenInfo = await this.rtc.shareScreen.getScreenInfo();
+    };
+
+    public updateShowShareScreenPicker = (show: boolean): void => {
+        this.showShareScreenPicker = show;
+    };
+
+    public updateSelectedScreenInfo = (info: FlatRTCShareScreenInfo | null): void => {
+        this.selectedScreenInfo = info;
+        this.rtc.shareScreen.setScreenInfo(info);
+    };
+
+    public updateShareScreen = (local: boolean, remote: boolean): void => {
+        this.isScreenSharing = local;
+        this.isRemoteScreenSharing = remote;
+    };
+
+    public toggleShareScreen = (force = !this.isScreenSharing): void => {
+        this.rtc.shareScreen.enable(force);
+        this.updateShowShareScreenPicker(false);
     };
 
     public updateHistory = async (): Promise<void> => {
@@ -458,6 +528,9 @@ export class ClassRoomStore {
         if (this.isBan && !this.isCreator) {
             return;
         }
+        if (NEED_CHECK_CENSOR && !(await checkRTMCensor({ text })).valid) {
+            return;
+        }
         await this.rtm.sendMessage(text);
         this.addMessage(RTMessageType.ChannelMessage, text, this.userUUID);
     };
@@ -566,7 +639,6 @@ export class ClassRoomStore {
         const members = await channel.getMembers();
         await this.users.initUsers(members);
 
-        this.onRTCEvents();
         await this.joinRTC();
 
         await this.updateInitialRoomState();
@@ -583,35 +655,20 @@ export class ClassRoomStore {
         channel.on("MemberLeft", this.users.removeUser);
     }
 
-    public onRTCEvents(): void {
-        this.rtc.rtcEngine.on("rtcStats", this.checkDelay);
-        this.rtc.rtcEngine.on("networkQuality", this.checkNetworkQuality);
-        this.rtc.rtcEngine.on("joinedChannel", this.handleRTCJoined);
-        this.rtc.rtcEngine.on("leaveChannel", this.handleRTCLeft);
-    }
-
-    public offRTCEvents(): void {
-        this.rtc.rtcEngine.off("rtcStats", this.checkDelay);
-        this.rtc.rtcEngine.off("networkQuality", this.checkNetworkQuality);
-        this.rtc.rtcEngine.off("joinedChannel", this.handleRTCJoined);
-        this.rtc.rtcEngine.off("leaveChannel", this.handleRTCLeft);
-    }
-
     public async destroy(): Promise<void> {
+        this.sideEffect.flushAll();
+
         const promises: Array<Promise<any>> = [];
 
         promises.push(this.rtm.destroy());
 
         promises.push(this.stopRecording());
 
-        promises.push(this.shareScreenStore.destroy());
-
         promises.push(this.whiteboardStore.destroy());
 
         this.leaveRTC();
 
-        this.offRTCEvents();
-        this.rtc.destroy();
+        this.rtc.leaveRoom();
 
         window.clearTimeout(this._collectChannelStatusTimeout);
 
@@ -636,6 +693,12 @@ export class ClassRoomStore {
                 case RoomStatus.Started: {
                     this.updateRoomStatusLoading(RoomStatusLoadingType.Starting);
                     await startClass(this.roomUUID);
+                    await roomStore.syncOrdinaryRoomInfo(this.roomUUID);
+                    const roomUUID = this.roomUUID;
+                    const periodicUUID = globalStore.periodicUUID;
+                    if (periodicUUID) {
+                        await roomStore.syncPeriodicSubRoomInfo({ periodicUUID, roomUUID });
+                    }
                     if (this.isCreator && this._userDeviceStatePrePause) {
                         const user = this.users.currentUser;
                         if (user) {
@@ -787,6 +850,10 @@ export class ClassRoomStore {
                     }
                     return true;
                 });
+                // Turn on the microphone automatically.
+                if (accept && userUUID === this.userUUID && this.users.currentUser) {
+                    this.updateDeviceState(userUUID, this.users.currentUser.camera, true);
+                }
             }
         });
 
@@ -1009,6 +1076,10 @@ export class ClassRoomStore {
         this.isCalling = isCalling;
     });
 
+    private updateIsJoinedRTC = action("updateIsJoinedRTC", (isJoinedRTC: boolean): void => {
+        this.isJoinedRTC = isJoinedRTC;
+    });
+
     private updateBanStatus = (isBan: boolean): void => {
         this.isBan = isBan;
     };
@@ -1063,32 +1134,6 @@ export class ClassRoomStore {
         this.tempChannelStatus.clear();
         window.clearTimeout(this._collectChannelStatusTimeout);
     }
-
-    private checkDelay = action((stats: RtcStats): void => {
-        this.networkQuality.delay = stats.lastmileDelay;
-    });
-
-    private handleRTCJoined = action(() => {
-        this.isRTCJoined = true;
-    });
-
-    private handleRTCLeft = action(() => {
-        this.isRTCJoined = false;
-    });
-
-    private checkNetworkQuality = action(
-        (
-            uid: number,
-            uplinkQuality: AgoraNetworkQuality,
-            downlinkQuality: AgoraNetworkQuality,
-        ): void => {
-            if (uid === 0) {
-                // current user
-                this.networkQuality.uplink = uplinkQuality;
-                this.networkQuality.downlink = downlinkQuality;
-            }
-        },
-    );
 }
 export interface ClassRoomStoreConfig {
     roomUUID: string;

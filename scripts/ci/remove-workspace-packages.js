@@ -1,22 +1,17 @@
 const fs = require("fs");
-const path = require("path");
+const { workspacePath } = require("../constants");
 
-const rootPackageJSONPath = path.resolve(__dirname, "..", "..", "package.json");
-
-/**
- * @type { typeof import("../../package.json") }
- */
-const packageJSONContent = require(rootPackageJSONPath);
+const content = {};
 
 const retentionPackageName = process.argv[2];
 
 switch (retentionPackageName) {
     case "desktop": {
-        packageJSONContent.workspaces.packages = ["desktop/*", "packages/*"];
+        content.workspaces = ["desktop/**", "packages/**"];
         break;
     }
     case "web": {
-        packageJSONContent.workspaces.packages = ["web/*", "packages/*"];
+        content.workspaces = ["web/**", "packages/**"];
         break;
     }
     default: {
@@ -24,6 +19,8 @@ switch (retentionPackageName) {
     }
 }
 
-fs.writeFileSync(rootPackageJSONPath, JSON.stringify(packageJSONContent, null, 2), {
+const text = `workspaces:\n  - ${content.workspaces.join("\n  - ")}`;
+
+fs.writeFileSync(workspacePath, text, {
     encoding: "utf-8",
 });

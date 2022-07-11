@@ -10,8 +10,11 @@ export const joinRoomHandler = async (
 ): Promise<void> => {
     try {
         const formatRoomUUID = roomUUID.replace(/\s+/g, "");
-        const data = await roomStore.joinRoom(formatRoomUUID);
+        const roomInfo = roomStore.rooms.get(formatRoomUUID);
+        const periodicUUID = roomInfo?.periodicUUID;
+        const data = await roomStore.joinRoom(periodicUUID || formatRoomUUID);
         globalStore.updateShowGuide(data.showGuide);
+        globalStore.updatePeriodicUUID(roomInfo?.periodicUUID);
         // try to work around chrome does not show permission popup after
         // soft navigating. here we do a "hard" navigating instead.
         switch (data.roomType) {

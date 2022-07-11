@@ -1,3 +1,98 @@
+## [1.8.2](https://github.com/netless-io/flat/compare/v1.8.1...v1.8.2) (2022-06-23)
+
+
+### Bug Fixes
+
+* **electron:** fix rtc avatar init without setting active ([#1583](https://github.com/netless-io/flat/issues/1583)) ([797186b](https://github.com/netless-io/flat/commit/797186b6f5ee8c33f4c3b4f4e88635b0fc04c42f))
+* **flat-components:** click TopBarRoundBtn component fail ([#1568](https://github.com/netless-io/flat/issues/1568)) ([b404c3f](https://github.com/netless-io/flat/commit/b404c3fd8b464be5e6540061f8b5457a5b01a1ae))
+* **flat-components:** loginTitle stories props `LoginPanelProps` to `LoginTitleProps` ([#1584](https://github.com/netless-io/flat/issues/1584)) ([1eeb652](https://github.com/netless-io/flat/commit/1eeb65224e18dcfd9d16aab7367525f925320720))
+* **flat-rtc:** fix rtc avatar black-screened due to partial IAgoraRTCRemoteUser callback ([#1582](https://github.com/netless-io/flat/issues/1582)) ([8cf4c43](https://github.com/netless-io/flat/commit/8cf4c432ee70085e5b01ed38a5cb93fa2bf100cb))
+* **flat-rtc:** fix rtc avatar destroyed unexpectedly ([#1581](https://github.com/netless-io/flat/issues/1581)) ([5d81121](https://github.com/netless-io/flat/commit/5d81121550953a7ad9ad5a99d6a731abd54b000a))
+* **web:** text of the subMenu component no refreshed when language is changed ([#1580](https://github.com/netless-io/flat/issues/1580)) ([4463a53](https://github.com/netless-io/flat/commit/4463a5356c0865da3b9337f6fa3b220eda005e1b))
+
+
+### Features
+
+* **project:** support bind github ([#1576](https://github.com/netless-io/flat/issues/1576)) ([bdf8eed](https://github.com/netless-io/flat/commit/bdf8eed91c18c39df7a7ceb822ab9cac763709dd))
+* **project:** support bind wechat ([#1572](https://github.com/netless-io/flat/issues/1572)) ([8439088](https://github.com/netless-io/flat/commit/84390888f4037679f02e2c409d7f236fb4088413))
+* **project:** support delete account ([#1577](https://github.com/netless-io/flat/issues/1577)) ([76d93b0](https://github.com/netless-io/flat/commit/76d93b0e9cdcf3c300ebcc5afdefd3324b41a4f6))
+* **project:** support unbind wechat ([#1573](https://github.com/netless-io/flat/issues/1573)) ([cd30465](https://github.com/netless-io/flat/commit/cd30465023821892b45d4aace03034e0cf62fe5f))
+
+
+
+## [1.8.1](https://github.com/netless-io/flat/compare/v1.8.0...v1.8.1) (2022-06-10)
+
+
+### Bug Fixes
+
+* **classroom:** force using periodic uuid when exist ([#1551](https://github.com/netless-io/flat/issues/1551)) ([1817304](https://github.com/netless-io/flat/commit/181730494896efeef8b56e59add1ca60df0ae8a5))
+* **cloud-storage:** fetch more cloud files fail ([#1558](https://github.com/netless-io/flat/issues/1558)) ([b45e14d](https://github.com/netless-io/flat/commit/b45e14d9178d77bbe96bcfe44d23b9f0664b953d))
+* **renderer-app:** fix rtc avatar missing init state ([#1544](https://github.com/netless-io/flat/issues/1544)) ([f0e620d](https://github.com/netless-io/flat/commit/f0e620ddbf6c9de8888de458761102c2ff29efef))
+* **whiteboard:** scroll bug on the edge ([#1561](https://github.com/netless-io/flat/issues/1561)) ([b5ee57c](https://github.com/netless-io/flat/commit/b5ee57c6492e35b2f95abd5e2d9aa9db6a0b5941))
+* **whiteboard:** upgrade fastboard to 0.3.4-canary.2 ([#1563](https://github.com/netless-io/flat/issues/1563)) ([dbabeff](https://github.com/netless-io/flat/commit/dbabeffad11d5fcb8a18acda9122ae7cb4cb95db))
+
+
+### Features
+
+* **project:** add rename settings ([#1545](https://github.com/netless-io/flat/issues/1545)) ([bf5f7c6](https://github.com/netless-io/flat/commit/bf5f7c6b3b33e0960a85d658b1403ff37264cbad))
+* **project:** support upload avatar ([#1559](https://github.com/netless-io/flat/issues/1559)) ([013dfd5](https://github.com/netless-io/flat/commit/013dfd56cd7a0c3df3db50fa416caeaee7c072a0))
+
+
+
+# [1.8.0](https://github.com/netless-io/flat/compare/v1.7.0...v1.8.0) (2022-05-30)
+
+
+### Bug Fixes
+
+* **ci:** out of memory when build web ([#1516](https://github.com/netless-io/flat/issues/1516)) ([d36af29](https://github.com/netless-io/flat/commit/d36af29fd85df3a2ba515e1df407e82d828db68b))
+* **ci:** override `@types/react` version ([#1515](https://github.com/netless-io/flat/issues/1515)) ([302403e](https://github.com/netless-io/flat/commit/302403ef43aee9c1092df94eed5d2ccc5f161942))
+* **ci:** yaml syntax fix ([#1522](https://github.com/netless-io/flat/issues/1522)) ([1ed7d24](https://github.com/netless-io/flat/commit/1ed7d24a15bb013256d1a6b0cca1647cb6803b2c))
+* **classroom:** whiteboard size error ([#1524](https://github.com/netless-io/flat/issues/1524)) ([b586cce](https://github.com/netless-io/flat/commit/b586ccee27d4178e5e14788e2eb62a2e36c2e855))
+* **component:** move react key prop to correct place ([#1528](https://github.com/netless-io/flat/issues/1528)) ([61d2510](https://github.com/netless-io/flat/commit/61d2510aa9f0987935656f05c8a5a0206cf7d804))
+* **component:** visual bug in auto dark mode ([#1531](https://github.com/netless-io/flat/issues/1531)) ([fd9dd15](https://github.com/netless-io/flat/commit/fd9dd1514dc117e1c78512495acdcecec0b584d5))
+* **desktop:** after packing, file has no icon ([#1481](https://github.com/netless-io/flat/issues/1481)) ([35c7271](https://github.com/netless-io/flat/commit/35c7271e5c0729326e922e790a998eca3e69c777))
+* **desktop:** cannot pack ([#1459](https://github.com/netless-io/flat/issues/1459)) ([cf3868f](https://github.com/netless-io/flat/commit/cf3868fab00b691b7bc8f544cc781ab6c4b5439c))
+* **electron:** correct assets root ([#1493](https://github.com/netless-io/flat/issues/1493)) ([290728e](https://github.com/netless-io/flat/commit/290728e5389840688e112f8c9baeeb642da64aa5))
+* **electron:** cross pack failed ([#1478](https://github.com/netless-io/flat/issues/1478)) ([2ea4e47](https://github.com/netless-io/flat/commit/2ea4e471970d58c50f9fd8afda6083a0d847c978))
+* **flat-rtc:** remove global env ([#1489](https://github.com/netless-io/flat/issues/1489)) ([f743817](https://github.com/netless-io/flat/commit/f74381746f6cf1da26ecf4f2168b512ba99c603f))
+* **flat-rtc:** track web rtc delayed remote video track ([#1540](https://github.com/netless-io/flat/issues/1540)) ([650a4e1](https://github.com/netless-io/flat/commit/650a4e13761092e6d71d9b7da1f87b52b57dbdaf))
+* **lint:** git commit failed after change pnpm-lock.yaml file ([#1475](https://github.com/netless-io/flat/issues/1475)) ([a83ad8b](https://github.com/netless-io/flat/commit/a83ad8bd403d68458f63035a5624ee9e1efaa9fe))
+* **main-app:** cannot find electron-builder config file ([#1472](https://github.com/netless-io/flat/issues/1472)) ([9add9d0](https://github.com/netless-io/flat/commit/9add9d06fbc5bc41d56ac5a1dfc54de26cd45b28))
+* **main-app:** launch electron failed ([#1466](https://github.com/netless-io/flat/issues/1466)) ([1fa6a44](https://github.com/netless-io/flat/commit/1fa6a44316b60d9ffde1962dac8f2cdf4aa7398f))
+* **project:** cannot bind phone ([#1494](https://github.com/netless-io/flat/issues/1494)) ([ed06dbe](https://github.com/netless-io/flat/commit/ed06dbe5a3d52160b6c588f936d27b6d3fb21cfd))
+* **project:** change cdn for monaco-editor ([#1534](https://github.com/netless-io/flat/issues/1534)) ([3a2e19d](https://github.com/netless-io/flat/commit/3a2e19d5e8869d30fda0c9074b9e86929463c7d3))
+* **project:** leak loop refreshing files ([#1496](https://github.com/netless-io/flat/issues/1496)) ([07dec32](https://github.com/netless-io/flat/commit/07dec327553f449cc17b6d0107fb3df8c230b43c))
+* **project:** leak refresh storage files loop ([#1487](https://github.com/netless-io/flat/issues/1487)) ([1da209b](https://github.com/netless-io/flat/commit/1da209bca3d7131ee8bb3750f165e71f282f1cb3))
+* **project:** the Timer component display error ([#1429](https://github.com/netless-io/flat/issues/1429)) ([b23c521](https://github.com/netless-io/flat/commit/b23c521d5a0bc5fe0d5c225679babf8c4b4080e4))
+* **readme:**  `pnpm dev` changed to `pnpm start` ([#1530](https://github.com/netless-io/flat/issues/1530)) ([8a0efa6](https://github.com/netless-io/flat/commit/8a0efa6e2c05537e27066b155736d95266be933b))
+* **scripts:** bootstrap command execute failed ([#1457](https://github.com/netless-io/flat/issues/1457)) ([cb8281f](https://github.com/netless-io/flat/commit/cb8281f465f19a30b45369c833285283136cfe02))
+* **scripts:** pnpm run start at root path failed ([#1467](https://github.com/netless-io/flat/issues/1467)) ([8c578f1](https://github.com/netless-io/flat/commit/8c578f11a7b609d008367faba80fb488e8961449))
+* **storybook:** add mock data to the cloudStorageContainer component ([#1460](https://github.com/netless-io/flat/issues/1460)) ([a0ce840](https://github.com/netless-io/flat/commit/a0ce84000699f292e9705c231a9e57988162be80))
+* **web:** agoraSSOLoginID persistence ([#1452](https://github.com/netless-io/flat/issues/1452)) ([734da34](https://github.com/netless-io/flat/commit/734da34a700ea1775a4a24ac145300c6330e65c9))
+* **web:** cannot logout when login type is agora sso ([#1454](https://github.com/netless-io/flat/issues/1454)) ([dfb8a27](https://github.com/netless-io/flat/commit/dfb8a27f811f5832ce5db1c02497f7726c87004f))
+* **web:** should check agora sso only once ([#1504](https://github.com/netless-io/flat/issues/1504)) ([e30113a](https://github.com/netless-io/flat/commit/e30113a2c4e0012d4ad62a0fec3b310ecc318b51)), closes [#1450](https://github.com/netless-io/flat/issues/1450)
+
+
+### Features
+
+* **api:** support set-cookie in login/process api ([#1448](https://github.com/netless-io/flat/issues/1448)) ([a95c4fb](https://github.com/netless-io/flat/commit/a95c4fb0e69f0730fc640c7b1d3d8b4298527dc8))
+* **classroom:** add double click event listener ([#1497](https://github.com/netless-io/flat/issues/1497)) ([2bbd683](https://github.com/netless-io/flat/commit/2bbd68328e412a756c2ce7d28ebf9457b07af0f9))
+* **classroom:** add presets ([#1526](https://github.com/netless-io/flat/issues/1526)) ([984a53d](https://github.com/netless-io/flat/commit/984a53dbc6623e63da8b727d410b58594c5ce105))
+* **component:** add save annotation modal ([#1512](https://github.com/netless-io/flat/issues/1512)) ([87ab828](https://github.com/netless-io/flat/commit/87ab828f0fd9703cedb8100928d0bd534b5565cc))
+* **flat-rtc:** add share screen ([#1508](https://github.com/netless-io/flat/issues/1508)) ([e0686ee](https://github.com/netless-io/flat/commit/e0686ee41e463c4ec01d254647de5ccf9a803a3d))
+* **i18n:** add variable app name ([#1453](https://github.com/netless-io/flat/issues/1453)) ([61e2327](https://github.com/netless-io/flat/commit/61e23274be011129d03c6e2831787a92991e0c68))
+* **login:** support google login ([#1465](https://github.com/netless-io/flat/issues/1465)) ([c9c1a34](https://github.com/netless-io/flat/commit/c9c1a34aa226fdce3d6f2a7afc33e9b9c788640c))
+* **project:** add the MainPageTopBar component and hidden title bar of Electron ([#1468](https://github.com/netless-io/flat/issues/1468)) ([0ad70d3](https://github.com/netless-io/flat/commit/0ad70d3cf0285b85220e34ee9611e1e9fdf3d928))
+* **project:** support America deploy ([#1436](https://github.com/netless-io/flat/issues/1436)) ([53c84b1](https://github.com/netless-io/flat/commit/53c84b1a681fb493888b53208b30cd9c036a342f))
+* **project:** support loading more cloudStorage data ([#1443](https://github.com/netless-io/flat/issues/1443)) ([7a4af54](https://github.com/netless-io/flat/commit/7a4af546bed31bd1b576dcbc8bc802c3296f83a2))
+
+
+### Reverts
+
+* Revert "feat(api): support set-cookie in login/process api (#1448)" (#1449) ([a69546d](https://github.com/netless-io/flat/commit/a69546db155574a006933fe441e061a6fedcfbf8)), closes [#1448](https://github.com/netless-io/flat/issues/1448) [#1449](https://github.com/netless-io/flat/issues/1449)
+
+
+
 # [1.7.0](https://github.com/netless-io/flat/compare/v1.6.1...v1.7.0) (2022-03-08)
 
 
